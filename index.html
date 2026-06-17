@@ -752,17 +752,15 @@
     const seed = {
       activeStreamId: "all",
       streams: [
-        { id: "startup", name: "Startup", color: colors[0] },
-        { id: "corporate", name: "Corporate transition", color: colors[1] },
-        { id: "community", name: "Community programs", color: colors[2] },
-        { id: "personal", name: "Personal", color: colors[3] }
+        { id: "work", name: "Work", color: colors[0] },
+        { id: "personal", name: "Personal", color: colors[1] }
       ],
       recurringTasks: [],
       tasks: [
         {
           id: crypto.randomUUID(),
-          title: "Define one venture momentum signal for this week",
-          streamId: "startup",
+          title: "Choose one important work outcome for today",
+          streamId: "work",
           date: today,
           start: "09:00",
           minutes: 45,
@@ -771,28 +769,14 @@
           critical: true,
           repeat: "none",
           done: false,
-          notes: "Pick the signal that would make the startup feel alive again."
+          notes: "Make it concrete enough to finish or move forward."
         },
         {
           id: crypto.randomUUID(),
-          title: "Shortlist corporate roles and rewrite top resume bullets",
-          streamId: "corporate",
+          title: "Handle one admin or communication task",
+          streamId: "work",
           date: today,
           start: "11:00",
-          minutes: 60,
-          priority: "critical",
-          personal: false,
-          critical: true,
-          repeat: "none",
-          done: false,
-          notes: "Focus on roles where founder experience is a strength."
-        },
-        {
-          id: crypto.randomUUID(),
-          title: "Confirm next community program owner",
-          streamId: "community",
-          date: today,
-          start: "15:30",
           minutes: 30,
           priority: "normal",
           personal: false,
