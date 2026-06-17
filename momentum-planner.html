@@ -1,0 +1,1295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#166b6b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Momentum">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Momentum</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/momentum-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d2530;
+      --muted: #607080;
+      --line: #d7dde4;
+      --soft: #f4f7f8;
+      --panel: #ffffff;
+      --accent: #166b6b;
+      --accent-strong: #0f5555;
+      --gold: #b7791f;
+      --rose: #b4435a;
+      --green: #2d7b4f;
+      --shadow: 0 16px 40px rgba(25, 38, 52, 0.12);
+      --radius: 8px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, rgba(235, 242, 241, 0.92), rgba(250, 250, 248, 0.9) 45%),
+        linear-gradient(120deg, #f6f1e7, #e9f1f0 52%, #f7eeee);
+    }
+
+    button,
+    input,
+    textarea,
+    select {
+      font: inherit;
+    }
+
+    button {
+      border: 0;
+      cursor: pointer;
+    }
+
+    .app {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 300px minmax(0, 1fr);
+      gap: 0;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    aside {
+      min-height: 100vh;
+      padding: 24px 18px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(10px);
+      position: sticky;
+      top: 0;
+      align-self: start;
+    }
+
+    .brand {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .mark {
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #6a8a3b);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 1.12rem;
+      line-height: 1.2;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+
+    .nav-title {
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      margin: 20px 6px 8px;
+    }
+
+    .stream-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .stream-button {
+      min-height: 48px;
+      width: 100%;
+      border-radius: var(--radius);
+      padding: 9px 10px;
+      display: grid;
+      grid-template-columns: 12px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      color: var(--ink);
+      background: transparent;
+      text-align: left;
+    }
+
+    .stream-button[aria-selected="true"] {
+      background: #e9f2ef;
+      box-shadow: inset 0 0 0 1px #cbded8;
+    }
+
+    .stream-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .stream-name {
+      font-weight: 750;
+      line-height: 1.2;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .count {
+      min-width: 28px;
+      height: 24px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: rgba(29, 37, 48, 0.08);
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .add-stream {
+      display: grid;
+      grid-template-columns: 1fr 42px;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      padding: 11px 12px;
+      outline: 0;
+      min-height: 42px;
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 84px;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(22, 107, 107, 0.14);
+    }
+
+    .icon-button,
+    .primary,
+    .ghost {
+      min-height: 42px;
+      border-radius: var(--radius);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .icon-button {
+      width: 42px;
+      background: var(--accent);
+      color: white;
+      font-size: 1.25rem;
+      line-height: 1;
+    }
+
+    .primary {
+      padding: 0 15px;
+      background: var(--accent);
+      color: white;
+    }
+
+    .primary:hover,
+    .icon-button:hover {
+      background: var(--accent-strong);
+    }
+
+    .ghost {
+      padding: 0 13px;
+      background: rgba(29, 37, 48, 0.07);
+      color: var(--ink);
+    }
+
+    main {
+      min-width: 0;
+      padding: 22px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+
+    .date-stack {
+      display: grid;
+      gap: 4px;
+    }
+
+    .date-stack h2 {
+      font-size: clamp(1.6rem, 3vw, 2.55rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .band,
+    .task-board {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: var(--shadow);
+    }
+
+    .band {
+      padding: 16px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .stat {
+      min-height: 86px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--soft);
+      display: grid;
+      align-content: space-between;
+      gap: 8px;
+    }
+
+    .stat strong {
+      font-size: 1.55rem;
+      line-height: 1;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h3 {
+      font-size: 1.03rem;
+    }
+
+    .schedule {
+      display: grid;
+      gap: 9px;
+    }
+
+    .slot {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      min-height: 72px;
+      padding: 10px;
+      display: grid;
+      grid-template-columns: 82px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      background: #fff;
+    }
+
+    .slot time {
+      font-weight: 850;
+      color: var(--accent);
+    }
+
+    .slot strong {
+      display: block;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .slot.personal time {
+      color: var(--gold);
+    }
+
+    .slot.critical {
+      border-color: rgba(180, 67, 90, 0.45);
+      background: #fff7f8;
+    }
+
+    .empty {
+      min-height: 110px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed #b9c3cc;
+      border-radius: var(--radius);
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.55);
+    }
+
+    .task-board {
+      overflow: hidden;
+    }
+
+    .task-form {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(244, 247, 248, 0.7);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 10px;
+    }
+
+    .form-grid.three {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .form-grid.four {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .check-row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: center;
+      color: var(--muted);
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+
+    .check-row label {
+      display: inline-flex;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .check-row input {
+      width: 17px;
+      min-height: 17px;
+      accent-color: var(--accent);
+    }
+
+    .tasks {
+      display: grid;
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .task {
+      background: #fff;
+      padding: 13px 14px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .task.done {
+      color: #75818d;
+      background: #fbfcfc;
+    }
+
+    .task input[type="checkbox"] {
+      width: 20px;
+      min-height: 20px;
+      accent-color: var(--green);
+      margin-top: 2px;
+    }
+
+    .task-title {
+      font-weight: 850;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .task.done .task-title {
+      text-decoration: line-through;
+    }
+
+    .meta {
+      display: flex;
+      gap: 7px;
+      flex-wrap: wrap;
+      margin-top: 7px;
+    }
+
+    .pill {
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: rgba(29, 37, 48, 0.08);
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .pill.critical {
+      background: #ffe6eb;
+      color: var(--rose);
+    }
+
+    .pill.personal {
+      background: #fff0d8;
+      color: var(--gold);
+    }
+
+    .task-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .mini {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius);
+      background: rgba(29, 37, 48, 0.07);
+      color: var(--ink);
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+    }
+
+    .progress-bar {
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(29, 37, 48, 0.08);
+      overflow: hidden;
+      margin-top: 14px;
+    }
+
+    .progress-bar span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      transition: width 0.25s ease;
+    }
+
+    dialog {
+      width: min(560px, calc(100% - 28px));
+      border: 0;
+      border-radius: var(--radius);
+      padding: 0;
+      box-shadow: var(--shadow);
+    }
+
+    dialog::backdrop {
+      background: rgba(18, 26, 35, 0.45);
+    }
+
+    .modal {
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        position: static;
+        min-height: 0;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .stream-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .dashboard {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      aside,
+      main {
+        padding: 16px;
+      }
+
+      .topbar {
+        display: grid;
+      }
+
+      .toolbar {
+        justify-content: stretch;
+      }
+
+      .toolbar > * {
+        flex: 1 1 auto;
+      }
+
+      .stream-list,
+      .stats,
+      .form-grid,
+      .form-grid.three,
+      .form-grid.four {
+        grid-template-columns: 1fr;
+      }
+
+      .slot {
+        grid-template-columns: 1fr auto;
+      }
+
+      .slot time {
+        grid-column: 1 / -1;
+      }
+
+      .task {
+        grid-template-columns: auto 1fr;
+      }
+
+      .task-actions {
+        grid-column: 2;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand">
+        <div class="mark">M</div>
+        <div>
+          <h1>Momentum</h1>
+          <p class="subtle">Timebox the work that matters today.</p>
+        </div>
+      </div>
+
+      <div class="nav-title">Work Streams</div>
+      <div class="stream-list" id="streamList"></div>
+
+      <form class="add-stream" id="streamForm">
+        <input id="streamName" placeholder="Add stream" aria-label="Add stream">
+        <button class="icon-button" aria-label="Add work stream" title="Add work stream">+</button>
+      </form>
+    </aside>
+
+    <main>
+      <div class="topbar">
+        <div class="date-stack">
+          <p class="subtle" id="todayLabel"></p>
+          <h2 id="activeStreamTitle">Today</h2>
+        </div>
+        <div class="toolbar">
+          <button class="ghost" id="editStreamButton">Rename</button>
+          <button class="ghost" id="exportButton">Export</button>
+          <button class="primary" id="clearDoneButton">Clear done</button>
+        </div>
+      </div>
+
+      <section class="dashboard">
+        <div class="task-board">
+          <form class="task-form" id="taskForm">
+            <div class="form-grid">
+              <input id="taskTitle" placeholder="Task or commitment" aria-label="Task title" required>
+              <select id="taskStream" aria-label="Work stream"></select>
+            </div>
+            <div class="form-grid four">
+              <input id="taskStart" type="time" aria-label="Start time">
+              <input id="taskMinutes" type="number" min="5" step="5" placeholder="Minutes" aria-label="Minutes">
+              <select id="taskPriority" aria-label="Priority">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+              <select id="taskRepeat" aria-label="Repeat">
+                <option value="none">No repeat</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </div>
+            <textarea id="taskNotes" placeholder="Notes, outcome, or next step" aria-label="Task notes"></textarea>
+            <div class="check-row">
+              <label><input id="taskPersonal" type="checkbox"> Personal time</label>
+              <label><input id="taskCritical" type="checkbox"> Critical task</label>
+            </div>
+            <button class="primary" type="submit">Add to today</button>
+          </form>
+          <div class="tasks" id="taskList"></div>
+        </div>
+
+        <div class="side-stack">
+          <section class="band">
+            <div class="section-head">
+              <h3>Today’s Scoreboard</h3>
+              <span class="pill" id="focusPill">All streams</span>
+            </div>
+            <p class="subtle">Track useful forward motion without pretending everything has equal weight.</p>
+            <div class="stats">
+              <div class="stat">
+                <span class="subtle">Done</span>
+                <strong id="doneCount">0</strong>
+              </div>
+              <div class="stat">
+                <span class="subtle">Planned</span>
+                <strong id="plannedMinutes">0m</strong>
+              </div>
+              <div class="stat">
+                <span class="subtle">Critical</span>
+                <strong id="criticalCount">0</strong>
+              </div>
+            </div>
+            <div class="progress-bar" aria-label="Completion progress"><span id="progressFill"></span></div>
+          </section>
+
+          <section class="band" style="margin-top: 16px;">
+            <div class="section-head">
+              <h3>Timeboxed Day</h3>
+              <button class="ghost" id="showAllButton">Show all</button>
+            </div>
+            <div class="schedule" id="scheduleList"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="editDialog">
+    <form class="modal" method="dialog" id="editForm">
+      <h3>Edit task</h3>
+      <input id="editTitle" aria-label="Task title">
+      <div class="form-grid four">
+        <input id="editStart" type="time" aria-label="Start time">
+        <input id="editMinutes" type="number" min="5" step="5" aria-label="Minutes">
+        <select id="editPriority" aria-label="Priority">
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
+        <select id="editRepeat" aria-label="Repeat">
+          <option value="none">No repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+      <select id="editStream" aria-label="Work stream"></select>
+      <textarea id="editNotes" aria-label="Notes"></textarea>
+      <div class="check-row">
+        <label><input id="editPersonal" type="checkbox"> Personal time</label>
+        <label><input id="editCritical" type="checkbox"> Critical task</label>
+      </div>
+      <div class="modal-actions">
+        <button class="ghost" value="cancel" type="button" id="cancelEdit">Cancel</button>
+        <button class="primary" value="default">Save changes</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const storageKey = "momentum-planner-v1";
+    const colors = ["#166b6b", "#7b5d18", "#a8455f", "#466d2f", "#43658b", "#865f4a"];
+    const today = new Date().toISOString().slice(0, 10);
+
+    const seed = {
+      activeStreamId: "all",
+      streams: [
+        { id: "startup", name: "Startup", color: colors[0] },
+        { id: "corporate", name: "Corporate transition", color: colors[1] },
+        { id: "community", name: "Community programs", color: colors[2] },
+        { id: "personal", name: "Personal", color: colors[3] }
+      ],
+      recurringTasks: [],
+      tasks: [
+        {
+          id: crypto.randomUUID(),
+          title: "Define one venture momentum signal for this week",
+          streamId: "startup",
+          date: today,
+          start: "09:00",
+          minutes: 45,
+          priority: "high",
+          personal: false,
+          critical: true,
+          repeat: "none",
+          done: false,
+          notes: "Pick the signal that would make the startup feel alive again."
+        },
+        {
+          id: crypto.randomUUID(),
+          title: "Shortlist corporate roles and rewrite top resume bullets",
+          streamId: "corporate",
+          date: today,
+          start: "11:00",
+          minutes: 60,
+          priority: "critical",
+          personal: false,
+          critical: true,
+          repeat: "none",
+          done: false,
+          notes: "Focus on roles where founder experience is a strength."
+        },
+        {
+          id: crypto.randomUUID(),
+          title: "Confirm next community program owner",
+          streamId: "community",
+          date: today,
+          start: "15:30",
+          minutes: 30,
+          priority: "normal",
+          personal: false,
+          critical: false,
+          repeat: "none",
+          done: false,
+          notes: ""
+        },
+        {
+          id: crypto.randomUUID(),
+          title: "Walk, reset, no screen",
+          streamId: "personal",
+          date: today,
+          start: "17:30",
+          minutes: 30,
+          priority: "normal",
+          personal: true,
+          critical: false,
+          repeat: "none",
+          done: false,
+          notes: ""
+        }
+      ]
+    };
+
+    let state = load();
+    let editingId = null;
+
+    const els = {
+      streamList: document.querySelector("#streamList"),
+      streamForm: document.querySelector("#streamForm"),
+      streamName: document.querySelector("#streamName"),
+      activeStreamTitle: document.querySelector("#activeStreamTitle"),
+      todayLabel: document.querySelector("#todayLabel"),
+      taskForm: document.querySelector("#taskForm"),
+      taskTitle: document.querySelector("#taskTitle"),
+      taskStream: document.querySelector("#taskStream"),
+      taskStart: document.querySelector("#taskStart"),
+      taskMinutes: document.querySelector("#taskMinutes"),
+      taskPriority: document.querySelector("#taskPriority"),
+      taskRepeat: document.querySelector("#taskRepeat"),
+      taskNotes: document.querySelector("#taskNotes"),
+      taskPersonal: document.querySelector("#taskPersonal"),
+      taskCritical: document.querySelector("#taskCritical"),
+      taskList: document.querySelector("#taskList"),
+      doneCount: document.querySelector("#doneCount"),
+      plannedMinutes: document.querySelector("#plannedMinutes"),
+      criticalCount: document.querySelector("#criticalCount"),
+      progressFill: document.querySelector("#progressFill"),
+      focusPill: document.querySelector("#focusPill"),
+      scheduleList: document.querySelector("#scheduleList"),
+      editStreamButton: document.querySelector("#editStreamButton"),
+      clearDoneButton: document.querySelector("#clearDoneButton"),
+      exportButton: document.querySelector("#exportButton"),
+      showAllButton: document.querySelector("#showAllButton"),
+      editDialog: document.querySelector("#editDialog"),
+      editForm: document.querySelector("#editForm"),
+      editTitle: document.querySelector("#editTitle"),
+      editStart: document.querySelector("#editStart"),
+      editMinutes: document.querySelector("#editMinutes"),
+      editPriority: document.querySelector("#editPriority"),
+      editRepeat: document.querySelector("#editRepeat"),
+      editStream: document.querySelector("#editStream"),
+      editNotes: document.querySelector("#editNotes"),
+      editPersonal: document.querySelector("#editPersonal"),
+      editCritical: document.querySelector("#editCritical"),
+      cancelEdit: document.querySelector("#cancelEdit")
+    };
+
+    els.todayLabel.textContent = new Intl.DateTimeFormat(undefined, {
+      weekday: "long",
+      month: "long",
+      day: "numeric"
+    }).format(new Date());
+
+    function load() {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return seed;
+      try {
+        const parsed = JSON.parse(raw);
+        return { ...seed, ...parsed, recurringTasks: parsed.recurringTasks || [] };
+      } catch {
+        return seed;
+      }
+    }
+
+    function save() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function parseDate(value) {
+      return new Date(`${value}T00:00:00`);
+    }
+
+    function daysBetween(start, end) {
+      return Math.round((parseDate(end) - parseDate(start)) / 86400000);
+    }
+
+    function isRecurringDue(template, date) {
+      if (!template.repeat || template.repeat === "none") return false;
+      if (daysBetween(template.startDate, date) < 0) return false;
+      if (template.skippedDates?.includes(date)) return false;
+      if (template.repeat === "daily") return true;
+      return template.repeat === "weekly" && daysBetween(template.startDate, date) % 7 === 0;
+    }
+
+    function taskFromTemplate(template, date) {
+      return {
+        id: crypto.randomUUID(),
+        recurrenceId: template.id,
+        title: template.title,
+        streamId: template.streamId,
+        date,
+        start: template.start,
+        minutes: template.minutes,
+        priority: template.priority,
+        personal: template.personal,
+        critical: template.critical,
+        repeat: template.repeat,
+        done: false,
+        notes: template.notes
+      };
+    }
+
+    function ensureRecurringTasks() {
+      state.recurringTasks = state.recurringTasks || [];
+      const existingKeys = new Set(state.tasks.map((task) => `${task.recurrenceId || task.id}:${task.date}`));
+      state.recurringTasks.forEach((template) => {
+        const key = `${template.id}:${today}`;
+        if (isRecurringDue(template, today) && !existingKeys.has(key)) {
+          state.tasks.push(taskFromTemplate(template, today));
+          existingKeys.add(key);
+        }
+      });
+    }
+
+    function upsertRecurringTemplate(task) {
+      state.recurringTasks = state.recurringTasks || [];
+      if (!task.repeat || task.repeat === "none") return;
+      let template = state.recurringTasks.find((item) => item.id === task.recurrenceId);
+      if (!template) {
+        task.recurrenceId = crypto.randomUUID();
+        template = { id: task.recurrenceId, startDate: task.date, skippedDates: [] };
+        state.recurringTasks.push(template);
+      }
+
+      Object.assign(template, {
+        title: task.title,
+        streamId: task.streamId,
+        startDate: template.startDate || task.date,
+        start: task.start,
+        minutes: task.minutes,
+        priority: task.priority,
+        personal: task.personal,
+        critical: task.critical,
+        repeat: task.repeat,
+        notes: task.notes,
+        skippedDates: template.skippedDates || []
+      });
+    }
+
+    function stopRecurringTask(task) {
+      if (!task.recurrenceId) return;
+      state.recurringTasks = (state.recurringTasks || []).filter((template) => template.id !== task.recurrenceId);
+      state.tasks.forEach((item) => {
+        if (item.recurrenceId === task.recurrenceId) {
+          item.repeat = "none";
+          delete item.recurrenceId;
+        }
+      });
+    }
+
+    function activeStream() {
+      return state.streams.find((stream) => stream.id === state.activeStreamId);
+    }
+
+    function visibleTasks() {
+      return state.tasks
+        .filter((task) => task.date === today)
+        .filter((task) => state.activeStreamId === "all" || task.streamId === state.activeStreamId)
+        .sort((a, b) => (a.start || "99:99").localeCompare(b.start || "99:99"));
+    }
+
+    function streamName(id) {
+      return state.streams.find((stream) => stream.id === id)?.name || "Unassigned";
+    }
+
+    function formatMinutes(minutes) {
+      const value = Number(minutes || 0);
+      if (!value) return "0m";
+      const hours = Math.floor(value / 60);
+      const mins = value % 60;
+      return hours ? `${hours}h${mins ? ` ${mins}m` : ""}` : `${mins}m`;
+    }
+
+    function renderStreams() {
+      const todayTasks = state.tasks.filter((task) => task.date === today);
+      const allCount = todayTasks.filter((task) => !task.done).length;
+      const buttons = [
+        { id: "all", name: "All streams", color: "#1d2530", count: allCount },
+        ...state.streams.map((stream) => ({
+          ...stream,
+          count: todayTasks.filter((task) => task.streamId === stream.id && !task.done).length
+        }))
+      ];
+
+      els.streamList.innerHTML = buttons.map((stream) => `
+        <button class="stream-button" aria-selected="${state.activeStreamId === stream.id}" data-stream="${stream.id}">
+          <span class="stream-dot" style="background:${stream.color}"></span>
+          <span class="stream-name">${escapeHtml(stream.name)}</span>
+          <span class="count">${stream.count}</span>
+        </button>
+      `).join("");
+
+      els.taskStream.innerHTML = state.streams.map(optionHtml).join("");
+      els.editStream.innerHTML = state.streams.map(optionHtml).join("");
+      syncTaskStreamDefault();
+    }
+
+    function optionHtml(stream) {
+      return `<option value="${stream.id}">${escapeHtml(stream.name)}</option>`;
+    }
+
+    function renderHeader() {
+      const stream = activeStream();
+      els.activeStreamTitle.textContent = stream ? stream.name : "Today";
+      els.focusPill.textContent = stream ? stream.name : "All streams";
+      els.editStreamButton.disabled = state.activeStreamId === "all";
+      els.editStreamButton.style.opacity = state.activeStreamId === "all" ? "0.5" : "1";
+    }
+
+    function syncTaskStreamDefault() {
+      const streamIds = new Set(state.streams.map((stream) => stream.id));
+      if (state.activeStreamId !== "all") {
+        els.taskStream.value = state.activeStreamId;
+        return;
+      }
+
+      if (!streamIds.has(els.taskStream.value)) {
+        els.taskStream.value = state.streams[0]?.id || "";
+      }
+    }
+
+    function renderTasks() {
+      const tasks = visibleTasks();
+      if (!tasks.length) {
+        els.taskList.innerHTML = `<div class="empty">No tasks here yet. Add one with a timebox and give the day a clear next move.</div>`;
+        return;
+      }
+
+      els.taskList.innerHTML = tasks.map((task) => `
+        <article class="task ${task.done ? "done" : ""}">
+          <input type="checkbox" ${task.done ? "checked" : ""} aria-label="Mark complete" data-toggle="${task.id}">
+          <div>
+            <div class="task-title">${escapeHtml(task.title)}</div>
+            <div class="meta">
+              <span class="pill">${escapeHtml(streamName(task.streamId))}</span>
+              ${task.start ? `<span class="pill">${task.start}</span>` : ""}
+              ${task.minutes ? `<span class="pill">${formatMinutes(task.minutes)}</span>` : ""}
+              ${task.priority !== "normal" ? `<span class="pill ${task.priority === "critical" ? "critical" : ""}">${task.priority}</span>` : ""}
+              ${task.repeat && task.repeat !== "none" ? `<span class="pill">${task.repeat}</span>` : ""}
+              ${task.critical ? `<span class="pill critical">critical</span>` : ""}
+              ${task.personal ? `<span class="pill personal">personal</span>` : ""}
+            </div>
+            ${task.notes ? `<p class="subtle" style="margin-top:8px;">${escapeHtml(task.notes)}</p>` : ""}
+          </div>
+          <div class="task-actions">
+            <button class="mini" aria-label="Edit task" title="Edit task" data-edit="${task.id}">✎</button>
+            <button class="mini" aria-label="Delete task" title="Delete task" data-delete="${task.id}">×</button>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderStats() {
+      const tasks = visibleTasks();
+      const done = tasks.filter((task) => task.done).length;
+      const planned = tasks.reduce((sum, task) => sum + Number(task.minutes || 0), 0);
+      const critical = tasks.filter((task) => task.critical || task.priority === "critical").length;
+      const percent = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+
+      els.doneCount.textContent = `${done}/${tasks.length}`;
+      els.plannedMinutes.textContent = formatMinutes(planned);
+      els.criticalCount.textContent = critical;
+      els.progressFill.style.width = `${percent}%`;
+    }
+
+    function renderSchedule() {
+      const timed = visibleTasks().filter((task) => task.start);
+      if (!timed.length) {
+        els.scheduleList.innerHTML = `<div class="empty">Add start times to see your day as timeboxes.</div>`;
+        return;
+      }
+
+      els.scheduleList.innerHTML = timed.map((task) => `
+        <div class="slot ${task.personal ? "personal" : ""} ${task.critical || task.priority === "critical" ? "critical" : ""}">
+          <time>${task.start}</time>
+          <div>
+            <strong>${escapeHtml(task.title)}</strong>
+            <span class="subtle">${escapeHtml(streamName(task.streamId))} · ${formatMinutes(task.minutes)}${task.repeat && task.repeat !== "none" ? ` · ${task.repeat}` : ""}</span>
+          </div>
+          <span class="pill">${task.done ? "done" : "open"}</span>
+        </div>
+      `).join("");
+    }
+
+    function render() {
+      renderStreams();
+      renderHeader();
+      renderTasks();
+      renderStats();
+      renderSchedule();
+      save();
+    }
+
+    function addTask(event) {
+      event.preventDefault();
+      const title = els.taskTitle.value.trim();
+      if (!title) return;
+
+      const task = {
+        id: crypto.randomUUID(),
+        title,
+        streamId: els.taskStream.value,
+        date: today,
+        start: els.taskStart.value,
+        minutes: Number(els.taskMinutes.value || 0),
+        priority: els.taskCritical.checked ? "critical" : els.taskPriority.value,
+        personal: els.taskPersonal.checked,
+        critical: els.taskCritical.checked,
+        repeat: els.taskRepeat.value,
+        done: false,
+        notes: els.taskNotes.value.trim()
+      };
+
+      upsertRecurringTemplate(task);
+      state.tasks.push(task);
+
+      els.taskForm.reset();
+      syncTaskStreamDefault();
+      render();
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[char]));
+    }
+
+    els.streamList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-stream]");
+      if (!button) return;
+      state.activeStreamId = button.dataset.stream;
+      syncTaskStreamDefault();
+      render();
+    });
+
+    els.streamForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const name = els.streamName.value.trim();
+      if (!name) return;
+      const stream = {
+        id: crypto.randomUUID(),
+        name,
+        color: colors[state.streams.length % colors.length]
+      };
+      state.streams.push(stream);
+      state.activeStreamId = stream.id;
+      els.streamName.value = "";
+      render();
+    });
+
+    els.taskForm.addEventListener("submit", addTask);
+
+    els.taskList.addEventListener("click", (event) => {
+      const toggle = event.target.closest("[data-toggle]");
+      const deleteButton = event.target.closest("[data-delete]");
+      const editButton = event.target.closest("[data-edit]");
+
+      if (toggle) {
+        const task = state.tasks.find((item) => item.id === toggle.dataset.toggle);
+        task.done = toggle.checked;
+        render();
+      }
+
+      if (deleteButton) {
+        const task = state.tasks.find((item) => item.id === deleteButton.dataset.delete);
+        const template = state.recurringTasks?.find((item) => item.id === task?.recurrenceId);
+        if (task?.recurrenceId && template) {
+          template.skippedDates = Array.from(new Set([...(template.skippedDates || []), task.date]));
+        }
+        state.tasks = state.tasks.filter((item) => item.id !== deleteButton.dataset.delete);
+        render();
+      }
+
+      if (editButton) {
+        openEditor(editButton.dataset.edit);
+      }
+    });
+
+    function openEditor(id) {
+      const task = state.tasks.find((item) => item.id === id);
+      if (!task) return;
+      editingId = id;
+      els.editTitle.value = task.title;
+      els.editStart.value = task.start;
+      els.editMinutes.value = task.minutes || "";
+      els.editPriority.value = task.priority;
+      els.editRepeat.value = task.repeat || "none";
+      els.editStream.value = task.streamId;
+      els.editNotes.value = task.notes;
+      els.editPersonal.checked = task.personal;
+      els.editCritical.checked = task.critical;
+      els.editDialog.showModal();
+    }
+
+    els.editForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const task = state.tasks.find((item) => item.id === editingId);
+      if (!task) return;
+      task.title = els.editTitle.value.trim() || task.title;
+      task.start = els.editStart.value;
+      task.minutes = Number(els.editMinutes.value || 0);
+      task.priority = els.editCritical.checked ? "critical" : els.editPriority.value;
+      task.streamId = els.editStream.value;
+      task.notes = els.editNotes.value.trim();
+      task.personal = els.editPersonal.checked;
+      task.critical = els.editCritical.checked;
+      task.repeat = els.editRepeat.value;
+      if (task.repeat === "none") {
+        stopRecurringTask(task);
+      } else {
+        upsertRecurringTemplate(task);
+      }
+      els.editDialog.close();
+      render();
+    });
+
+    els.cancelEdit.addEventListener("click", () => els.editDialog.close());
+
+    els.editStreamButton.addEventListener("click", () => {
+      const stream = activeStream();
+      if (!stream) return;
+      const next = prompt("Rename work stream", stream.name);
+      if (!next?.trim()) return;
+      stream.name = next.trim();
+      render();
+    });
+
+    els.clearDoneButton.addEventListener("click", () => {
+      const doneTasks = visibleTasks().filter((task) => task.done);
+      doneTasks.forEach((task) => {
+        const template = state.recurringTasks?.find((item) => item.id === task.recurrenceId);
+        if (template) {
+          template.skippedDates = Array.from(new Set([...(template.skippedDates || []), task.date]));
+        }
+      });
+      const visibleIds = new Set(doneTasks.map((task) => task.id));
+      state.tasks = state.tasks.filter((task) => !visibleIds.has(task.id));
+      render();
+    });
+
+    els.showAllButton.addEventListener("click", () => {
+      state.activeStreamId = "all";
+      render();
+    });
+
+    els.exportButton.addEventListener("click", async () => {
+      const text = visibleTasks().map((task) => {
+        const status = task.done ? "done" : "open";
+        const flags = [
+          task.critical ? "critical" : "",
+          task.personal ? "personal" : "",
+          task.repeat && task.repeat !== "none" ? task.repeat : ""
+        ].filter(Boolean).join(", ");
+        return `${status.toUpperCase()} | ${task.start || "anytime"} | ${formatMinutes(task.minutes)} | ${streamName(task.streamId)} | ${task.title}${flags ? ` | ${flags}` : ""}`;
+      }).join("\n");
+
+      await navigator.clipboard.writeText(text || "No tasks planned.");
+      els.exportButton.textContent = "Copied";
+      setTimeout(() => {
+        els.exportButton.textContent = "Export";
+      }, 1400);
+    });
+
+    ensureRecurringTasks();
+    render();
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
