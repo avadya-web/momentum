@@ -208,6 +208,29 @@
       overflow-wrap: anywhere;
     }
 
+    body.signed-out main,
+    body.signed-out .nav-title,
+    body.signed-out .stream-list,
+    body.signed-out .add-stream {
+      display: none;
+    }
+
+    body.signed-out .app {
+      grid-template-columns: minmax(280px, 430px);
+      justify-content: center;
+      background: transparent;
+    }
+
+    body.signed-out aside {
+      min-height: auto;
+      border-right: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      margin: 7vh 16px 0;
+      position: static;
+    }
+
     input,
     textarea,
     select {
@@ -941,12 +964,13 @@
 
     function updateAuthUi() {
       const signedIn = Boolean(currentUser);
+      document.body.classList.toggle("signed-out", !signedIn);
       els.authForm.hidden = signedIn;
       els.signOutButton.hidden = !signedIn;
       if (signedIn) {
         setAuthStatus(`Signed in as ${currentUser.email}. Sync is ${cloudReady ? "on" : "starting"}.`);
       } else {
-        setAuthStatus("Local mode. Sign in to sync across devices.");
+        setAuthStatus("Sign in to unlock your private planner and sync across devices.");
       }
     }
 
@@ -1014,7 +1038,12 @@
       const { data } = await supabaseClient.auth.getSession();
       currentUser = data.session?.user || null;
       updateAuthUi();
-      if (currentUser) await loadCloudState();
+      if (currentUser) {
+        await loadCloudState();
+      } else {
+        state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
+        render();
+      }
     }
 
     function parseDate(value) {
@@ -1239,7 +1268,7 @@
       renderTasks();
       renderStats();
       renderSchedule();
-      save();
+      if (currentUser) save();
     }
 
     function addTask(event) {
@@ -1382,7 +1411,9 @@
       await supabaseClient.auth.signOut();
       currentUser = null;
       cloudReady = false;
+      state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
       updateAuthUi();
+      render();
     });
 
     els.taskList.addEventListener("click", (event) => {
@@ -1496,15 +1527,19 @@
       }, 1400);
     });
 
-    ensureRecurringTasks();
-    render();
+    document.body.classList.add("signed-out");
     refreshSession();
 
     supabaseClient?.auth.onAuthStateChange((_event, session) => {
       currentUser = session?.user || null;
       cloudReady = false;
       updateAuthUi();
-      if (currentUser) loadCloudState();
+      if (currentUser) {
+        loadCloudState();
+      } else {
+        state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
+        render();
+      }
     });
 
     if ("serviceWorker" in navigator) {
