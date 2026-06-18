@@ -197,7 +197,7 @@
 
     .auth-actions {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -660,6 +660,7 @@
           <div class="auth-actions">
             <button class="primary" type="submit">Sign in</button>
             <button class="ghost" type="button" id="signUpButton">Create</button>
+            <button class="ghost" type="button" id="resendButton">Resend</button>
           </div>
         </form>
         <button class="ghost" type="button" id="signOutButton" hidden>Sign out</button>
@@ -855,6 +856,7 @@
       authEmail: document.querySelector("#authEmail"),
       authPassword: document.querySelector("#authPassword"),
       signUpButton: document.querySelector("#signUpButton"),
+      resendButton: document.querySelector("#resendButton"),
       signOutButton: document.querySelector("#signOutButton"),
       authStatus: document.querySelector("#authStatus"),
       activeStreamTitle: document.querySelector("#activeStreamTitle"),
@@ -1332,8 +1334,24 @@
         await loadCloudState();
       } else {
         currentUser = null;
-        setAuthStatus("Account created. Check your email to confirm, then sign in.");
+        setAuthStatus("Account created. Check your email to confirm, then sign in. Use Resend if it does not arrive.");
       }
+    });
+
+    els.resendButton.addEventListener("click", async () => {
+      if (!supabaseClient) return setAuthStatus("Sync unavailable. Supabase client did not load.");
+      const email = els.authEmail.value.trim();
+      if (!email) return setAuthStatus("Enter your email, then tap Resend.");
+      setAuthStatus("Sending confirmation email...");
+      const { error } = await supabaseClient.auth.resend({
+        type: "signup",
+        email,
+        options: {
+          emailRedirectTo: authRedirectUrl
+        }
+      });
+      if (error) return setAuthStatus(error.message);
+      setAuthStatus("Confirmation email sent. Check your inbox and spam folder.");
     });
 
     els.signOutButton.addEventListener("click", async () => {
