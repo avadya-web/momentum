@@ -197,7 +197,7 @@
 
     .auth-actions {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -660,6 +660,7 @@
           <div class="auth-actions">
             <button class="primary" type="submit">Sign in</button>
             <button class="ghost" type="button" id="signUpButton">Create</button>
+            <button class="ghost" type="button" id="magicLinkButton">Email link</button>
             <button class="ghost" type="button" id="resendButton">Resend</button>
           </div>
         </form>
@@ -856,6 +857,7 @@
       authEmail: document.querySelector("#authEmail"),
       authPassword: document.querySelector("#authPassword"),
       signUpButton: document.querySelector("#signUpButton"),
+      magicLinkButton: document.querySelector("#magicLinkButton"),
       resendButton: document.querySelector("#resendButton"),
       signOutButton: document.querySelector("#signOutButton"),
       authStatus: document.querySelector("#authStatus"),
@@ -905,7 +907,13 @@
     const supabaseUrl = "https://mgyfzalxapmvlahzrufc.supabase.co";
     const supabaseKey = "sb_publishable_GsIp52MPie-qNHY7vu5UdQ_3zp6fQCW";
     const authRedirectUrl = "https://avadya-web.github.io/momentum/";
-    const supabaseClient = window.supabase?.createClient(supabaseUrl, supabaseKey);
+    const supabaseClient = window.supabase?.createClient(supabaseUrl, supabaseKey, {
+      auth: {
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        persistSession: true
+      }
+    });
     let currentUser = null;
     let cloudReady = false;
     let syncTimer = null;
@@ -1352,6 +1360,21 @@
       });
       if (error) return setAuthStatus(error.message);
       setAuthStatus("Confirmation email sent. Check your inbox and spam folder.");
+    });
+
+    els.magicLinkButton.addEventListener("click", async () => {
+      if (!supabaseClient) return setAuthStatus("Sync unavailable. Supabase client did not load.");
+      const email = els.authEmail.value.trim();
+      if (!email) return setAuthStatus("Enter your email, then tap Email link.");
+      setAuthStatus("Sending sign-in link...");
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: authRedirectUrl
+        }
+      });
+      if (error) return setAuthStatus(error.message);
+      setAuthStatus("Sign-in link sent. Check your inbox and spam folder.");
     });
 
     els.signOutButton.addEventListener("click", async () => {
