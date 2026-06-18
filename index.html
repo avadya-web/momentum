@@ -902,6 +902,7 @@
 
     const supabaseUrl = "https://mgyfzalxapmvlahzrufc.supabase.co";
     const supabaseKey = "sb_publishable_GsIp52MPie-qNHY7vu5UdQ_3zp6fQCW";
+    const authRedirectUrl = "https://avadya-web.github.io/momentum/";
     const supabaseClient = window.supabase?.createClient(supabaseUrl, supabaseKey);
     let currentUser = null;
     let cloudReady = false;
@@ -1316,7 +1317,13 @@
       if (!email || !password) return setAuthStatus("Enter an email and password.");
       if (password.length < 6) return setAuthStatus("Use a password with at least 6 characters.");
       setAuthStatus("Creating account...");
-      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      const { data, error } = await supabaseClient.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: authRedirectUrl
+        }
+      });
       if (error) return setAuthStatus(error.message);
       els.authPassword.value = "";
       if (data.session) {
