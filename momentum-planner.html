@@ -12,6 +12,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/momentum-icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script src="vendor/supabase.js"></script>
   <style>
     :root {
       color-scheme: light;
@@ -177,6 +178,34 @@
       grid-template-columns: 1fr 42px;
       gap: 8px;
       margin-top: 12px;
+    }
+
+    .auth-panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--soft);
+      padding: 12px;
+      display: grid;
+      gap: 9px;
+      margin: 14px 0 18px;
+    }
+
+    .auth-panel form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .auth-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .auth-status {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
     }
 
     input,
@@ -624,6 +653,19 @@
         </div>
       </div>
 
+      <section class="auth-panel">
+        <form id="authForm">
+          <input id="authEmail" type="email" placeholder="Email" autocomplete="email" aria-label="Email">
+          <input id="authPassword" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password">
+          <div class="auth-actions">
+            <button class="primary" type="submit">Sign in</button>
+            <button class="ghost" type="button" id="signUpButton">Create</button>
+          </div>
+        </form>
+        <button class="ghost" type="button" id="signOutButton" hidden>Sign out</button>
+        <p class="auth-status" id="authStatus">Local mode. Sign in to sync across devices.</p>
+      </section>
+
       <div class="nav-title">Work Streams</div>
       <div class="stream-list" id="streamList"></div>
 
@@ -809,6 +851,12 @@
       streamList: document.querySelector("#streamList"),
       streamForm: document.querySelector("#streamForm"),
       streamName: document.querySelector("#streamName"),
+      authForm: document.querySelector("#authForm"),
+      authEmail: document.querySelector("#authEmail"),
+      authPassword: document.querySelector("#authPassword"),
+      signUpButton: document.querySelector("#signUpButton"),
+      signOutButton: document.querySelector("#signOutButton"),
+      authStatus: document.querySelector("#authStatus"),
       activeStreamTitle: document.querySelector("#activeStreamTitle"),
       todayLabel: document.querySelector("#todayLabel"),
       taskForm: document.querySelector("#taskForm"),
@@ -852,6 +900,14 @@
       day: "numeric"
     }).format(new Date());
 
+    const supabaseUrl = "https://mgyfzalxapmvlahzrufc.supabase.co";
+    const supabaseKey = "sb_publishable_GsIp52MPie-qNHY7vu5UdQ_3zp6fQCW";
+    const supabaseClient = window.supabase?.createClient(supabaseUrl, supabaseKey);
+    let currentUser = null;
+    let cloudReady = false;
+    let syncTimer = null;
+    let isLoadingCloud = false;
+
     function load() {
       const raw = localStorage.getItem(storageKey);
       if (!raw) return seed;
@@ -865,6 +921,89 @@
 
     function save() {
       localStorage.setItem(storageKey, JSON.stringify(state));
+      queueCloudSave();
+    }
+
+    function setAuthStatus(message) {
+      els.authStatus.textContent = message;
+    }
+
+    function updateAuthUi() {
+      const signedIn = Boolean(currentUser);
+      els.authForm.hidden = signedIn;
+      els.signOutButton.hidden = !signedIn;
+      if (signedIn) {
+        setAuthStatus(`Signed in as ${currentUser.email}. Sync is ${cloudReady ? "on" : "starting"}.`);
+      } else {
+        setAuthStatus("Local mode. Sign in to sync across devices.");
+      }
+    }
+
+    function queueCloudSave() {
+      if (!currentUser || !cloudReady || isLoadingCloud) return;
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(saveCloudState, 500);
+    }
+
+    async function saveCloudState() {
+      if (!supabaseClient || !currentUser) return;
+      const payload = {
+        user_id: currentUser.id,
+        state,
+        updated_at: new Date().toISOString()
+      };
+      const { error } = await supabaseClient
+        .from("planner_states")
+        .upsert(payload, { onConflict: "user_id" });
+
+      if (error) {
+        setAuthStatus(`Sync paused: ${error.message}`);
+        return;
+      }
+
+      setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
+    }
+
+    async function loadCloudState() {
+      if (!supabaseClient || !currentUser) return;
+      isLoadingCloud = true;
+      setAuthStatus(`Signed in as ${currentUser.email}. Loading sync...`);
+
+      const { data, error } = await supabaseClient
+        .from("planner_states")
+        .select("state")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+      if (error) {
+        cloudReady = false;
+        isLoadingCloud = false;
+        setAuthStatus(`Sync setup needed: ${error.message}`);
+        return;
+      }
+
+      if (data?.state) {
+        state = { ...seed, ...data.state, recurringTasks: data.state.recurringTasks || [] };
+        ensureRecurringTasks();
+      } else {
+        await saveCloudState();
+      }
+
+      cloudReady = true;
+      isLoadingCloud = false;
+      render();
+    }
+
+    async function refreshSession() {
+      if (!supabaseClient) {
+        setAuthStatus("Sync unavailable. Supabase client did not load.");
+        return;
+      }
+
+      const { data } = await supabaseClient.auth.getSession();
+      currentUser = data.session?.user || null;
+      updateAuthUi();
+      if (currentUser) await loadCloudState();
     }
 
     function parseDate(value) {
@@ -1155,6 +1294,49 @@
 
     els.taskForm.addEventListener("submit", addTask);
 
+    els.authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!supabaseClient) return setAuthStatus("Sync unavailable. Supabase client did not load.");
+      const email = els.authEmail.value.trim();
+      const password = els.authPassword.value;
+      if (!email || !password) return setAuthStatus("Enter an email and password.");
+      setAuthStatus("Signing in...");
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) return setAuthStatus(error.message);
+      currentUser = data.user;
+      els.authPassword.value = "";
+      updateAuthUi();
+      await loadCloudState();
+    });
+
+    els.signUpButton.addEventListener("click", async () => {
+      if (!supabaseClient) return setAuthStatus("Sync unavailable. Supabase client did not load.");
+      const email = els.authEmail.value.trim();
+      const password = els.authPassword.value;
+      if (!email || !password) return setAuthStatus("Enter an email and password.");
+      if (password.length < 6) return setAuthStatus("Use a password with at least 6 characters.");
+      setAuthStatus("Creating account...");
+      const { data, error } = await supabaseClient.auth.signUp({ email, password });
+      if (error) return setAuthStatus(error.message);
+      els.authPassword.value = "";
+      if (data.session) {
+        currentUser = data.user;
+        updateAuthUi();
+        await loadCloudState();
+      } else {
+        currentUser = null;
+        setAuthStatus("Account created. Check your email to confirm, then sign in.");
+      }
+    });
+
+    els.signOutButton.addEventListener("click", async () => {
+      if (!supabaseClient) return;
+      await supabaseClient.auth.signOut();
+      currentUser = null;
+      cloudReady = false;
+      updateAuthUi();
+    });
+
     els.taskList.addEventListener("click", (event) => {
       const toggle = event.target.closest("[data-toggle]");
       const deleteButton = event.target.closest("[data-delete]");
@@ -1268,6 +1450,14 @@
 
     ensureRecurringTasks();
     render();
+    refreshSession();
+
+    supabaseClient?.auth.onAuthStateChange((_event, session) => {
+      currentUser = session?.user || null;
+      cloudReady = false;
+      updateAuthUi();
+      if (currentUser) loadCloudState();
+    });
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

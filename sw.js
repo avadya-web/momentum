@@ -1,9 +1,11 @@
-const cacheName = "momentum-v6";
+const cacheName = "momentum-v8";
 const appShell = [
   "./",
   "./index.html",
   "./momentum-planner.html",
   "./manifest.webmanifest",
+  "./supabase-schema.sql",
+  "./vendor/supabase.js",
   "./icons/momentum-icon.svg",
   "./icons/momentum-icon-192.png",
   "./icons/momentum-icon-512.png",
