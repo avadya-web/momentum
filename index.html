@@ -718,6 +718,7 @@
         </div>
         <div class="toolbar">
           <button class="ghost" id="editStreamButton">Rename</button>
+          <button class="ghost" id="deleteStreamButton">Delete stream</button>
           <button class="ghost" id="exportButton">Export</button>
           <button class="primary" id="clearDoneButton">Clear done</button>
         </div>
@@ -915,6 +916,7 @@
       focusPill: document.querySelector("#focusPill"),
       scheduleList: document.querySelector("#scheduleList"),
       editStreamButton: document.querySelector("#editStreamButton"),
+      deleteStreamButton: document.querySelector("#deleteStreamButton"),
       clearDoneButton: document.querySelector("#clearDoneButton"),
       exportButton: document.querySelector("#exportButton"),
       showAllButton: document.querySelector("#showAllButton"),
@@ -1195,6 +1197,8 @@
       els.focusPill.textContent = stream ? stream.name : "All streams";
       els.editStreamButton.disabled = state.activeStreamId === "all";
       els.editStreamButton.style.opacity = state.activeStreamId === "all" ? "0.5" : "1";
+      els.deleteStreamButton.disabled = state.activeStreamId === "all";
+      els.deleteStreamButton.style.opacity = state.activeStreamId === "all" ? "0.5" : "1";
     }
 
     function syncTaskStreamDefault() {
@@ -1498,6 +1502,20 @@
       const next = prompt("Rename work stream", stream.name);
       if (!next?.trim()) return;
       stream.name = next.trim();
+      render();
+    });
+
+    els.deleteStreamButton.addEventListener("click", () => {
+      const stream = activeStream();
+      if (!stream) return;
+      const taskCount = state.tasks.filter((task) => task.streamId === stream.id).length;
+      const recurringCount = state.recurringTasks.filter((template) => template.streamId === stream.id).length;
+      const message = `Delete "${stream.name}" and remove ${taskCount} task${taskCount === 1 ? "" : "s"}${recurringCount ? ` plus ${recurringCount} recurring template${recurringCount === 1 ? "" : "s"}` : ""}?`;
+      if (!confirm(message)) return;
+      state.streams = state.streams.filter((item) => item.id !== stream.id);
+      state.tasks = state.tasks.filter((task) => task.streamId !== stream.id);
+      state.recurringTasks = state.recurringTasks.filter((template) => template.streamId !== stream.id);
+      state.activeStreamId = "all";
       render();
     });
 
