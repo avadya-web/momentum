@@ -963,6 +963,7 @@
     let cloudReady = false;
     let syncTimer = null;
     let isLoadingCloud = false;
+    let hasUnsavedChanges = false;
 
     els.staySignedIn.checked = localStorage.getItem(staySignedInKey) !== "false";
     els.staySignedIn.addEventListener("change", () => {
@@ -982,7 +983,6 @@
 
     function save() {
       localStorage.setItem(storageKey, JSON.stringify(state));
-      queueCloudSave();
     }
 
     function freshState() {
@@ -1011,12 +1011,26 @@
 
     function queueCloudSave() {
       if (!currentUser || !cloudReady || isLoadingCloud) return;
+      hasUnsavedChanges = true;
+      setSyncStatus("Unsaved changes...");
       clearTimeout(syncTimer);
-      syncTimer = setTimeout(saveCloudState, 500);
+      syncTimer = setTimeout(saveCloudState, 150);
+    }
+
+    function markDirty() {
+      if (!currentUser || isLoadingCloud) return;
+      save();
+      hasUnsavedChanges = true;
+      if (!cloudReady) {
+        setSyncStatus("Waiting for sync to start...");
+        return;
+      }
+      queueCloudSave();
     }
 
     async function saveCloudState() {
       if (!supabaseClient || !currentUser) return false;
+      clearTimeout(syncTimer);
       setSyncStatus("Saving...");
       const payload = {
         user_id: currentUser.id,
@@ -1035,7 +1049,20 @@
 
       setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
       setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+      hasUnsavedChanges = false;
       return true;
+    }
+
+    async function syncNow() {
+      if (!currentUser) {
+        setSyncStatus("Sign in before syncing.");
+        return;
+      }
+      if (hasUnsavedChanges) {
+        await saveCloudState();
+        return;
+      }
+      await loadCloudState();
     }
 
     async function loadCloudState() {
@@ -1313,7 +1340,6 @@
       renderTasks();
       renderStats();
       renderSchedule();
-      if (currentUser) save();
     }
 
     function addTask(event) {
@@ -1342,6 +1368,7 @@
       els.taskForm.reset();
       syncTaskStreamDefault();
       render();
+      markDirty();
     }
 
     function escapeHtml(value) {
@@ -1375,6 +1402,7 @@
       state.activeStreamId = stream.id;
       els.streamName.value = "";
       render();
+      markDirty();
     });
 
     els.taskForm.addEventListener("submit", addTask);
@@ -1465,8 +1493,7 @@
     });
 
     els.syncNowButton.addEventListener("click", async () => {
-      if (!currentUser) return setSyncStatus("Sign in before syncing.");
-      await loadCloudState();
+      await syncNow();
     });
 
     els.taskList.addEventListener("click", (event) => {
@@ -1478,6 +1505,7 @@
         const task = state.tasks.find((item) => item.id === toggle.dataset.toggle);
         task.done = toggle.checked;
         render();
+        markDirty();
       }
 
       if (deleteButton) {
@@ -1488,6 +1516,7 @@
         }
         state.tasks = state.tasks.filter((item) => item.id !== deleteButton.dataset.delete);
         render();
+        markDirty();
       }
 
       if (editButton) {
@@ -1531,6 +1560,7 @@
       }
       els.editDialog.close();
       render();
+      markDirty();
     });
 
     els.cancelEdit.addEventListener("click", () => els.editDialog.close());
@@ -1542,6 +1572,7 @@
       if (!next?.trim()) return;
       stream.name = next.trim();
       render();
+      markDirty();
     });
 
     els.deleteStreamButton.addEventListener("click", () => {
@@ -1556,6 +1587,7 @@
       state.recurringTasks = state.recurringTasks.filter((template) => template.streamId !== stream.id);
       state.activeStreamId = "all";
       render();
+      markDirty();
     });
 
     els.clearDoneButton.addEventListener("click", () => {
@@ -1569,6 +1601,7 @@
       const visibleIds = new Set(doneTasks.map((task) => task.id));
       state.tasks = state.tasks.filter((task) => !visibleIds.has(task.id));
       render();
+      markDirty();
     });
 
     els.showAllButton.addEventListener("click", () => {
