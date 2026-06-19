@@ -677,6 +677,9 @@
       <form id="authForm">
         <input id="authEmail" type="email" placeholder="Email" autocomplete="email" aria-label="Email">
         <input id="authPassword" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password">
+        <div class="check-row">
+          <label><input id="staySignedIn" type="checkbox" checked> Stay signed in on this device</label>
+        </div>
         <div class="auth-actions">
           <button class="primary" type="submit">Sign in</button>
           <button class="ghost" type="button" id="signUpButton">Create</button>
@@ -700,6 +703,8 @@
         </div>
 
         <button class="ghost" type="button" id="signOutButton">Sign out</button>
+        <button class="ghost" type="button" id="syncNowButton">Sync now</button>
+        <p class="auth-status" id="syncStatus">Sync starts after sign-in.</p>
 
         <div class="nav-title">Work Streams</div>
         <div class="stream-list" id="streamList"></div>
@@ -891,11 +896,14 @@
       authForm: document.querySelector("#authForm"),
       authEmail: document.querySelector("#authEmail"),
       authPassword: document.querySelector("#authPassword"),
+      staySignedIn: document.querySelector("#staySignedIn"),
       signUpButton: document.querySelector("#signUpButton"),
       magicLinkButton: document.querySelector("#magicLinkButton"),
       resendButton: document.querySelector("#resendButton"),
       signOutButton: document.querySelector("#signOutButton"),
       authStatus: document.querySelector("#authStatus"),
+      syncNowButton: document.querySelector("#syncNowButton"),
+      syncStatus: document.querySelector("#syncStatus"),
       activeStreamTitle: document.querySelector("#activeStreamTitle"),
       todayLabel: document.querySelector("#todayLabel"),
       taskForm: document.querySelector("#taskForm"),
@@ -943,6 +951,7 @@
     const supabaseUrl = "https://mgyfzalxapmvlahzrufc.supabase.co";
     const supabaseKey = "sb_publishable_GsIp52MPie-qNHY7vu5UdQ_3zp6fQCW";
     const authRedirectUrl = "https://avadya-web.github.io/momentum/";
+    const staySignedInKey = "momentum-stay-signed-in";
     const supabaseClient = window.supabase?.createClient(supabaseUrl, supabaseKey, {
       auth: {
         autoRefreshToken: true,
@@ -954,6 +963,11 @@
     let cloudReady = false;
     let syncTimer = null;
     let isLoadingCloud = false;
+
+    els.staySignedIn.checked = localStorage.getItem(staySignedInKey) !== "false";
+    els.staySignedIn.addEventListener("change", () => {
+      localStorage.setItem(staySignedInKey, String(els.staySignedIn.checked));
+    });
 
     function load() {
       const raw = localStorage.getItem(storageKey);
@@ -971,8 +985,16 @@
       queueCloudSave();
     }
 
+    function freshState() {
+      return JSON.parse(JSON.stringify(seed));
+    }
+
     function setAuthStatus(message) {
       els.authStatus.textContent = message;
+    }
+
+    function setSyncStatus(message) {
+      els.syncStatus.textContent = message;
     }
 
     function updateAuthUi() {
@@ -983,6 +1005,7 @@
         setAuthStatus(`Signed in as ${currentUser.email}. Sync is ${cloudReady ? "on" : "starting"}.`);
       } else {
         setAuthStatus("Sign in to unlock your private planner and sync across devices.");
+        setSyncStatus("Sync starts after sign-in.");
       }
     }
 
@@ -993,7 +1016,8 @@
     }
 
     async function saveCloudState() {
-      if (!supabaseClient || !currentUser) return;
+      if (!supabaseClient || !currentUser) return false;
+      setSyncStatus("Saving...");
       const payload = {
         user_id: currentUser.id,
         state,
@@ -1005,16 +1029,20 @@
 
       if (error) {
         setAuthStatus(`Sync paused: ${error.message}`);
-        return;
+        setSyncStatus(`Save failed: ${error.message}`);
+        return false;
       }
 
       setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
+      setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+      return true;
     }
 
     async function loadCloudState() {
       if (!supabaseClient || !currentUser) return;
       isLoadingCloud = true;
       setAuthStatus(`Signed in as ${currentUser.email}. Loading sync...`);
+      setSyncStatus("Loading latest...");
 
       const { data, error } = await supabaseClient
         .from("planner_states")
@@ -1026,6 +1054,7 @@
         cloudReady = false;
         isLoadingCloud = false;
         setAuthStatus(`Sync setup needed: ${error.message}`);
+        setSyncStatus(`Load failed: ${error.message}`);
         return;
       }
 
@@ -1033,12 +1062,14 @@
         state = { ...seed, ...data.state, recurringTasks: data.state.recurringTasks || [] };
         ensureRecurringTasks();
       } else {
-        await saveCloudState();
+        state = freshState();
+        ensureRecurringTasks();
       }
 
       cloudReady = true;
       isLoadingCloud = false;
       render();
+      await saveCloudState();
     }
 
     async function refreshSession() {
@@ -1357,6 +1388,7 @@
       setAuthStatus("Signing in...");
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) return setAuthStatus(error.message);
+      localStorage.setItem(staySignedInKey, String(els.staySignedIn.checked));
       currentUser = data.user;
       els.authPassword.value = "";
       updateAuthUi();
@@ -1378,6 +1410,7 @@
         }
       });
       if (error) return setAuthStatus(error.message);
+      localStorage.setItem(staySignedInKey, String(els.staySignedIn.checked));
       els.authPassword.value = "";
       if (data.session) {
         currentUser = data.user;
@@ -1425,9 +1458,15 @@
       await supabaseClient.auth.signOut();
       currentUser = null;
       cloudReady = false;
+      clearTimeout(syncTimer);
       state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
       updateAuthUi();
       render();
+    });
+
+    els.syncNowButton.addEventListener("click", async () => {
+      if (!currentUser) return setSyncStatus("Sign in before syncing.");
+      await loadCloudState();
     });
 
     els.taskList.addEventListener("click", (event) => {
@@ -1567,6 +1606,16 @@
       } else {
         state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
         render();
+      }
+    });
+
+    window.addEventListener("focus", () => {
+      if (currentUser && cloudReady) loadCloudState();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible" && currentUser && cloudReady) {
+        loadCloudState();
       }
     });
 
