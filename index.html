@@ -994,7 +994,9 @@
     let cloudReady = false;
     let syncTimer = null;
     let isLoadingCloud = false;
+    let isSavingCloud = false;
     let hasUnsavedChanges = false;
+    let localRevision = 0;
 
     els.staySignedIn.checked = localStorage.getItem(staySignedInKey) !== "false";
     els.staySignedIn.addEventListener("change", () => {
@@ -1041,7 +1043,7 @@
     }
 
     function queueCloudSave() {
-      if (!currentUser || !cloudReady || isLoadingCloud) return;
+      if (!currentUser || !cloudReady || isLoadingCloud || isSavingCloud) return;
       hasUnsavedChanges = true;
       setSyncStatus("Unsaved changes...");
       clearTimeout(syncTimer);
@@ -1049,10 +1051,11 @@
     }
 
     function markDirty() {
-      if (!currentUser || isLoadingCloud) return;
+      if (!currentUser) return;
       save();
+      localRevision += 1;
       hasUnsavedChanges = true;
-      if (!cloudReady) {
+      if (!cloudReady || isLoadingCloud) {
         setSyncStatus("Waiting for sync to start...");
         return;
       }
@@ -1060,27 +1063,38 @@
     }
 
     async function saveCloudState() {
-      if (!supabaseClient || !currentUser) return false;
+      if (!supabaseClient || !currentUser || isSavingCloud || isLoadingCloud) return false;
       clearTimeout(syncTimer);
+      const savingRevision = localRevision;
+      const stateSnapshot = JSON.parse(JSON.stringify(state));
+      isSavingCloud = true;
       setSyncStatus("Saving...");
       const payload = {
         user_id: currentUser.id,
-        state,
+        state: stateSnapshot,
         updated_at: new Date().toISOString()
       };
       const { error } = await supabaseClient
         .from("planner_states")
         .upsert(payload, { onConflict: "user_id" });
 
+      isSavingCloud = false;
+
       if (error) {
+        hasUnsavedChanges = true;
         setAuthStatus(`Sync paused: ${error.message}`);
         setSyncStatus(`Save failed: ${error.message}`);
         return false;
       }
 
-      setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
-      setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
-      hasUnsavedChanges = false;
+      hasUnsavedChanges = localRevision !== savingRevision;
+      if (hasUnsavedChanges) {
+        setSyncStatus("Saving latest changes...");
+        queueCloudSave();
+      } else {
+        setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
+        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+      }
       return true;
     }
 
@@ -1098,6 +1112,8 @@
 
     async function loadCloudState() {
       if (!supabaseClient || !currentUser) return;
+      if (isLoadingCloud || isSavingCloud || hasUnsavedChanges) return;
+      const revisionAtLoad = localRevision;
       isLoadingCloud = true;
       setAuthStatus(`Signed in as ${currentUser.email}. Loading sync...`);
       setSyncStatus("Loading latest...");
@@ -1116,18 +1132,34 @@
         return;
       }
 
+      if (localRevision !== revisionAtLoad || hasUnsavedChanges) {
+        isLoadingCloud = false;
+        cloudReady = true;
+        await saveCloudState();
+        return;
+      }
+
+      let createdRecurringTasks = 0;
       if (data?.state) {
         state = { ...seed, ...data.state, recurringTasks: data.state.recurringTasks || [] };
-        ensureRecurringTasks();
+        createdRecurringTasks = ensureRecurringTasks();
       } else {
         state = freshState();
-        ensureRecurringTasks();
+        createdRecurringTasks = ensureRecurringTasks();
       }
 
       cloudReady = true;
       isLoadingCloud = false;
+      save();
       render();
-      await saveCloudState();
+      if (createdRecurringTasks || !data?.state) {
+        localRevision += 1;
+        hasUnsavedChanges = true;
+        await saveCloudState();
+      } else {
+        setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
+        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+      }
     }
 
     async function refreshSession() {
@@ -1314,7 +1346,7 @@
       els.planDate.min = today;
       els.previousDayButton.disabled = selectedDate <= today;
       els.taskDate.value = selectedDate;
-      els.addTaskButton.textContent = selectedDate === today ? "Add to today" : `Add to ${formatTaskDate(selectedDate, { short: true })}`;
+      els.addTaskButton.textContent = "Add task";
       els.scoreboardTitle.textContent = selectedDate === today ? "Today’s Scoreboard" : "Day’s Scoreboard";
       els.scheduleTitle.textContent = selectedDate === today ? "Timeboxed Day" : `Timeboxed ${formatTaskDate(selectedDate, { short: true })}`;
       els.focusPill.textContent = stream ? stream.name : "All streams";
@@ -1721,11 +1753,13 @@
     refreshSession();
 
     supabaseClient?.auth.onAuthStateChange((_event, session) => {
-      currentUser = session?.user || null;
-      cloudReady = false;
+      const nextUser = session?.user || null;
+      const userChanged = nextUser?.id !== currentUser?.id;
+      currentUser = nextUser;
+      if (userChanged) cloudReady = false;
       updateAuthUi();
       if (currentUser) {
-        loadCloudState();
+        if (userChanged || !cloudReady) loadCloudState();
       } else {
         state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
         render();
@@ -1733,11 +1767,11 @@
     });
 
     window.addEventListener("focus", () => {
-      if (currentUser && cloudReady) loadCloudState();
+      if (currentUser && cloudReady && !hasUnsavedChanges && !isSavingCloud && !isLoadingCloud) loadCloudState();
     });
 
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible" && currentUser && cloudReady) {
+      if (document.visibilityState === "visible" && currentUser && cloudReady && !hasUnsavedChanges && !isSavingCloud && !isLoadingCloud) {
         loadCloudState();
       }
     });
