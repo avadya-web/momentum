@@ -316,6 +316,19 @@
       letter-spacing: 0;
     }
 
+    .date-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .date-controls input[type="date"] {
+      width: auto;
+      min-width: 156px;
+    }
+
     .toolbar {
       display: flex;
       gap: 8px;
@@ -720,6 +733,12 @@
         <div class="date-stack">
           <p class="subtle" id="todayLabel"></p>
           <h2 id="activeStreamTitle">Today</h2>
+          <div class="date-controls" aria-label="Plan date controls">
+            <button class="icon-button" type="button" id="previousDayButton" aria-label="Previous day" title="Previous day">&#8592;</button>
+            <button class="ghost" type="button" id="todayButton">Today</button>
+            <input id="planDate" type="date" aria-label="Date being planned">
+            <button class="icon-button" type="button" id="nextDayButton" aria-label="Next day" title="Next day">&#8594;</button>
+          </div>
         </div>
         <div class="toolbar">
           <button class="ghost" id="editStreamButton">Rename</button>
@@ -735,6 +754,10 @@
             <div class="form-grid">
               <input id="taskTitle" placeholder="Task or commitment" aria-label="Task title" required>
               <select id="taskStream" aria-label="Work stream"></select>
+            </div>
+            <div class="form-grid">
+              <input id="taskDate" type="date" aria-label="Finish date" required>
+              <span class="subtle" style="align-self:center;">Finish date</span>
             </div>
             <div class="form-grid four">
               <input id="taskStart" type="time" aria-label="Start time">
@@ -755,7 +778,7 @@
               <label><input id="taskPersonal" type="checkbox"> Personal time</label>
               <label><input id="taskCritical" type="checkbox"> Critical task</label>
             </div>
-            <button class="primary" type="submit">Add to today</button>
+            <button class="primary" type="submit" id="addTaskButton">Add task</button>
           </form>
           <div class="tasks" id="taskList"></div>
         </div>
@@ -763,7 +786,7 @@
         <div class="side-stack">
           <section class="band">
             <div class="section-head">
-              <h3>Today’s Scoreboard</h3>
+              <h3 id="scoreboardTitle">Today’s Scoreboard</h3>
               <span class="pill" id="focusPill">All streams</span>
             </div>
             <p class="subtle">Track useful forward motion without pretending everything has equal weight.</p>
@@ -786,7 +809,7 @@
 
           <section class="band" style="margin-top: 16px;">
             <div class="section-head">
-              <h3>Timeboxed Day</h3>
+              <h3 id="scheduleTitle">Timeboxed Day</h3>
               <button class="ghost" id="showAllButton">Show all</button>
             </div>
             <div class="schedule" id="scheduleList"></div>
@@ -801,6 +824,7 @@
     <form class="modal" method="dialog" id="editForm">
       <h3>Edit task</h3>
       <input id="editTitle" aria-label="Task title">
+      <input id="editDate" type="date" aria-label="Finish date" required>
       <div class="form-grid four">
         <input id="editStart" type="time" aria-label="Start time">
         <input id="editMinutes" type="number" min="5" step="5" aria-label="Minutes">
@@ -831,7 +855,7 @@
   <script>
     const storageKey = "momentum-planner-v1";
     const colors = ["#166b6b", "#7b5d18", "#a8455f", "#466d2f", "#43658b", "#865f4a"];
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDateInput(new Date());
 
     const seed = {
       activeStreamId: "all",
@@ -888,6 +912,7 @@
 
     let state = load();
     let editingId = null;
+    let selectedDate = today;
 
     const els = {
       streamList: document.querySelector("#streamList"),
@@ -906,9 +931,14 @@
       syncStatus: document.querySelector("#syncStatus"),
       activeStreamTitle: document.querySelector("#activeStreamTitle"),
       todayLabel: document.querySelector("#todayLabel"),
+      previousDayButton: document.querySelector("#previousDayButton"),
+      todayButton: document.querySelector("#todayButton"),
+      planDate: document.querySelector("#planDate"),
+      nextDayButton: document.querySelector("#nextDayButton"),
       taskForm: document.querySelector("#taskForm"),
       taskTitle: document.querySelector("#taskTitle"),
       taskStream: document.querySelector("#taskStream"),
+      taskDate: document.querySelector("#taskDate"),
       taskStart: document.querySelector("#taskStart"),
       taskMinutes: document.querySelector("#taskMinutes"),
       taskPriority: document.querySelector("#taskPriority"),
@@ -916,7 +946,10 @@
       taskNotes: document.querySelector("#taskNotes"),
       taskPersonal: document.querySelector("#taskPersonal"),
       taskCritical: document.querySelector("#taskCritical"),
+      addTaskButton: document.querySelector("#addTaskButton"),
       taskList: document.querySelector("#taskList"),
+      scoreboardTitle: document.querySelector("#scoreboardTitle"),
+      scheduleTitle: document.querySelector("#scheduleTitle"),
       doneCount: document.querySelector("#doneCount"),
       plannedMinutes: document.querySelector("#plannedMinutes"),
       criticalCount: document.querySelector("#criticalCount"),
@@ -931,6 +964,7 @@
       editDialog: document.querySelector("#editDialog"),
       editForm: document.querySelector("#editForm"),
       editTitle: document.querySelector("#editTitle"),
+      editDate: document.querySelector("#editDate"),
       editStart: document.querySelector("#editStart"),
       editMinutes: document.querySelector("#editMinutes"),
       editPriority: document.querySelector("#editPriority"),
@@ -942,11 +976,8 @@
       cancelEdit: document.querySelector("#cancelEdit")
     };
 
-    els.todayLabel.textContent = new Intl.DateTimeFormat(undefined, {
-      weekday: "long",
-      month: "long",
-      day: "numeric"
-    }).format(new Date());
+    els.taskDate.min = today;
+    els.editDate.min = today;
 
     const supabaseUrl = "https://mgyfzalxapmvlahzrufc.supabase.co";
     const supabaseKey = "sb_publishable_GsIp52MPie-qNHY7vu5UdQ_3zp6fQCW";
@@ -1120,6 +1151,29 @@
       return new Date(`${value}T00:00:00`);
     }
 
+    function toLocalDateInput(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function formatTaskDate(value, options = {}) {
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: options.short ? undefined : "long",
+        month: "short",
+        day: "numeric",
+        year: parseDate(value).getFullYear() === new Date().getFullYear() ? undefined : "numeric"
+      }).format(parseDate(value));
+    }
+
+    function selectDate(value) {
+      selectedDate = value < today ? today : value;
+      const createdRecurringTasks = ensureRecurringTasks(selectedDate);
+      render();
+      if (createdRecurringTasks) markDirty();
+    }
+
     function daysBetween(start, end) {
       return Math.round((parseDate(end) - parseDate(start)) / 86400000);
     }
@@ -1150,16 +1204,19 @@
       };
     }
 
-    function ensureRecurringTasks() {
+    function ensureRecurringTasks(date = today) {
       state.recurringTasks = state.recurringTasks || [];
+      let created = 0;
       const existingKeys = new Set(state.tasks.map((task) => `${task.recurrenceId || task.id}:${task.date}`));
       state.recurringTasks.forEach((template) => {
-        const key = `${template.id}:${today}`;
-        if (isRecurringDue(template, today) && !existingKeys.has(key)) {
-          state.tasks.push(taskFromTemplate(template, today));
+        const key = `${template.id}:${date}`;
+        if (isRecurringDue(template, date) && !existingKeys.has(key)) {
+          state.tasks.push(taskFromTemplate(template, date));
           existingKeys.add(key);
+          created += 1;
         }
       });
+      return created;
     }
 
     function upsertRecurringTemplate(task) {
@@ -1204,7 +1261,7 @@
 
     function visibleTasks() {
       return state.tasks
-        .filter((task) => task.date === today)
+        .filter((task) => task.date === selectedDate)
         .filter((task) => state.activeStreamId === "all" || task.streamId === state.activeStreamId)
         .sort((a, b) => (a.start || "99:99").localeCompare(b.start || "99:99"));
     }
@@ -1222,13 +1279,13 @@
     }
 
     function renderStreams() {
-      const todayTasks = state.tasks.filter((task) => task.date === today);
-      const allCount = todayTasks.filter((task) => !task.done).length;
+      const dayTasks = state.tasks.filter((task) => task.date === selectedDate);
+      const allCount = dayTasks.filter((task) => !task.done).length;
       const buttons = [
         { id: "all", name: "All streams", color: "#1d2530", count: allCount },
         ...state.streams.map((stream) => ({
           ...stream,
-          count: todayTasks.filter((task) => task.streamId === stream.id && !task.done).length
+          count: dayTasks.filter((task) => task.streamId === stream.id && !task.done).length
         }))
       ];
 
@@ -1251,7 +1308,15 @@
 
     function renderHeader() {
       const stream = activeStream();
-      els.activeStreamTitle.textContent = stream ? stream.name : "Today";
+      els.activeStreamTitle.textContent = stream ? stream.name : (selectedDate === today ? "Today" : "Plan");
+      els.todayLabel.textContent = formatTaskDate(selectedDate);
+      els.planDate.value = selectedDate;
+      els.planDate.min = today;
+      els.previousDayButton.disabled = selectedDate <= today;
+      els.taskDate.value = selectedDate;
+      els.addTaskButton.textContent = selectedDate === today ? "Add to today" : `Add to ${formatTaskDate(selectedDate, { short: true })}`;
+      els.scoreboardTitle.textContent = selectedDate === today ? "Today’s Scoreboard" : "Day’s Scoreboard";
+      els.scheduleTitle.textContent = selectedDate === today ? "Timeboxed Day" : `Timeboxed ${formatTaskDate(selectedDate, { short: true })}`;
       els.focusPill.textContent = stream ? stream.name : "All streams";
       els.editStreamButton.disabled = state.activeStreamId === "all";
       els.editStreamButton.style.opacity = state.activeStreamId === "all" ? "0.5" : "1";
@@ -1285,6 +1350,7 @@
             <div class="task-title">${escapeHtml(task.title)}</div>
             <div class="meta">
               <span class="pill">${escapeHtml(streamName(task.streamId))}</span>
+              <span class="pill">Finish ${escapeHtml(formatTaskDate(task.date, { short: true }))}</span>
               ${task.start ? `<span class="pill">${task.start}</span>` : ""}
               ${task.minutes ? `<span class="pill">${formatMinutes(task.minutes)}</span>` : ""}
               ${task.priority !== "normal" ? `<span class="pill ${task.priority === "critical" ? "critical" : ""}">${task.priority}</span>` : ""}
@@ -1351,7 +1417,7 @@
         id: crypto.randomUUID(),
         title,
         streamId: els.taskStream.value,
-        date: today,
+        date: els.taskDate.value || selectedDate,
         start: els.taskStart.value,
         minutes: Number(els.taskMinutes.value || 0),
         priority: els.taskCritical.checked ? "critical" : els.taskPriority.value,
@@ -1366,6 +1432,7 @@
       state.tasks.push(task);
 
       els.taskForm.reset();
+      selectedDate = task.date;
       syncTaskStreamDefault();
       render();
       markDirty();
@@ -1406,6 +1473,26 @@
     });
 
     els.taskForm.addEventListener("submit", addTask);
+
+    els.previousDayButton.addEventListener("click", () => {
+      const date = parseDate(selectedDate);
+      date.setDate(date.getDate() - 1);
+      selectDate(toLocalDateInput(date));
+    });
+
+    els.todayButton.addEventListener("click", () => selectDate(today));
+
+    els.nextDayButton.addEventListener("click", () => {
+      const date = parseDate(selectedDate);
+      date.setDate(date.getDate() + 1);
+      selectDate(toLocalDateInput(date));
+    });
+
+    els.planDate.addEventListener("change", () => selectDate(els.planDate.value || today));
+
+    els.taskDate.addEventListener("change", () => {
+      if (els.taskDate.value) selectedDate = els.taskDate.value;
+    });
 
     els.authForm.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1529,6 +1616,7 @@
       if (!task) return;
       editingId = id;
       els.editTitle.value = task.title;
+      els.editDate.value = task.date || today;
       els.editStart.value = task.start;
       els.editMinutes.value = task.minutes || "";
       els.editPriority.value = task.priority;
@@ -1545,6 +1633,7 @@
       const task = state.tasks.find((item) => item.id === editingId);
       if (!task) return;
       task.title = els.editTitle.value.trim() || task.title;
+      task.date = els.editDate.value || task.date || today;
       task.start = els.editStart.value;
       task.minutes = Number(els.editMinutes.value || 0);
       task.priority = els.editCritical.checked ? "critical" : els.editPriority.value;
@@ -1559,6 +1648,7 @@
         upsertRecurringTemplate(task);
       }
       els.editDialog.close();
+      selectedDate = task.date;
       render();
       markDirty();
     });
@@ -1617,7 +1707,7 @@
           task.personal ? "personal" : "",
           task.repeat && task.repeat !== "none" ? task.repeat : ""
         ].filter(Boolean).join(", ");
-        return `${status.toUpperCase()} | ${task.start || "anytime"} | ${formatMinutes(task.minutes)} | ${streamName(task.streamId)} | ${task.title}${flags ? ` | ${flags}` : ""}`;
+        return `${status.toUpperCase()} | finish ${task.date} | ${task.start || "anytime"} | ${formatMinutes(task.minutes)} | ${streamName(task.streamId)} | ${task.title}${flags ? ` | ${flags}` : ""}`;
       }).join("\n");
 
       await navigator.clipboard.writeText(text || "No tasks planned.");
