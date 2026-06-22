@@ -12,6 +12,11 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/momentum-icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <script>
+    if (window.location.protocol === "file:") {
+      window.location.replace("https://avadya-web.github.io/momentum/");
+    }
+  </script>
   <script src="vendor/supabase.js"></script>
   <style>
     :root {
@@ -290,6 +295,11 @@
       padding: 0 13px;
       background: rgba(29, 37, 48, 0.07);
       color: var(--ink);
+    }
+
+    .ghost[aria-pressed="true"] {
+      background: var(--ink);
+      color: white;
     }
 
     main {
@@ -736,6 +746,7 @@
           <div class="date-controls" aria-label="Plan date controls">
             <button class="icon-button" type="button" id="previousDayButton" aria-label="Previous day" title="Previous day">&#8592;</button>
             <button class="ghost" type="button" id="todayButton">Today</button>
+            <button class="ghost" type="button" id="allDatesButton">All dates</button>
             <input id="planDate" type="date" aria-label="Date being planned">
             <button class="icon-button" type="button" id="nextDayButton" aria-label="Next day" title="Next day">&#8594;</button>
           </div>
@@ -853,7 +864,10 @@
   </dialog>
 
   <script>
-    const storageKey = "momentum-planner-v1";
+    const legacyStorageKey = "momentum-planner-v1";
+    const userStoragePrefix = "momentum-planner-user-v1:";
+    const pendingSavePrefix = "momentum-planner-pending-v1:";
+    const migrationPrefix = "momentum-planner-migrated-v19:";
     const colors = ["#166b6b", "#7b5d18", "#a8455f", "#466d2f", "#43658b", "#865f4a"];
     const today = toLocalDateInput(new Date());
 
@@ -910,9 +924,11 @@
       ]
     };
 
-    let state = load();
+    let state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
     let editingId = null;
     let selectedDate = today;
+    let showAllDates = false;
+    let shouldMergeLegacyCache = false;
 
     const els = {
       streamList: document.querySelector("#streamList"),
@@ -933,6 +949,7 @@
       todayLabel: document.querySelector("#todayLabel"),
       previousDayButton: document.querySelector("#previousDayButton"),
       todayButton: document.querySelector("#todayButton"),
+      allDatesButton: document.querySelector("#allDatesButton"),
       planDate: document.querySelector("#planDate"),
       nextDayButton: document.querySelector("#nextDayButton"),
       taskForm: document.querySelector("#taskForm"),
@@ -1003,8 +1020,20 @@
       localStorage.setItem(staySignedInKey, String(els.staySignedIn.checked));
     });
 
-    function load() {
-      const raw = localStorage.getItem(storageKey);
+    function storageKeyForUser(userId) {
+      return `${userStoragePrefix}${userId}`;
+    }
+
+    function pendingKeyForUser(userId) {
+      return `${pendingSavePrefix}${userId}`;
+    }
+
+    function migrationKeyForUser(userId) {
+      return `${migrationPrefix}${userId}`;
+    }
+
+    function loadUserState(userId) {
+      const raw = localStorage.getItem(storageKeyForUser(userId)) || localStorage.getItem(legacyStorageKey);
       if (!raw) return seed;
       try {
         const parsed = JSON.parse(raw);
@@ -1015,7 +1044,34 @@
     }
 
     function save() {
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      if (!currentUser) return;
+      localStorage.setItem(storageKeyForUser(currentUser.id), JSON.stringify(state));
+    }
+
+    function hydrateUserCache(user) {
+      const hasUserCache = Boolean(localStorage.getItem(storageKeyForUser(user.id)));
+      const hasLegacyCache = Boolean(localStorage.getItem(legacyStorageKey));
+      state = loadUserState(user.id);
+      hasUnsavedChanges = localStorage.getItem(pendingKeyForUser(user.id)) === "true";
+      shouldMergeLegacyCache = !hasUserCache && hasLegacyCache && localStorage.getItem(migrationKeyForUser(user.id)) !== "true";
+      localRevision = 0;
+      render();
+    }
+
+    function mergeById(primary = [], secondary = []) {
+      const merged = new Map(secondary.map((item) => [item.id, item]));
+      primary.forEach((item) => merged.set(item.id, item));
+      return Array.from(merged.values());
+    }
+
+    function mergePlannerStates(cloudState, localState) {
+      return {
+        ...localState,
+        ...cloudState,
+        streams: mergeById(cloudState.streams, localState.streams),
+        recurringTasks: mergeById(cloudState.recurringTasks, localState.recurringTasks),
+        tasks: mergeById(cloudState.tasks, localState.tasks)
+      };
     }
 
     function freshState() {
@@ -1053,6 +1109,7 @@
     function markDirty() {
       if (!currentUser) return;
       save();
+      localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
       localRevision += 1;
       hasUnsavedChanges = true;
       if (!cloudReady || isLoadingCloud) {
@@ -1092,8 +1149,9 @@
         setSyncStatus("Saving latest changes...");
         queueCloudSave();
       } else {
+        localStorage.removeItem(pendingKeyForUser(currentUser.id));
         setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
-        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · ${state.tasks.length} tasks`);
       }
       return true;
     }
@@ -1110,8 +1168,25 @@
       await loadCloudState();
     }
 
+    function hasTaskDraft() {
+      return Boolean(
+        els.taskTitle.value.trim() ||
+        els.taskNotes.value.trim() ||
+        els.taskStart.value ||
+        els.taskMinutes.value ||
+        els.taskRepeat.value !== "none" ||
+        els.taskPersonal.checked ||
+        els.taskCritical.checked ||
+        els.editDialog.open
+      );
+    }
+
     async function loadCloudState() {
       if (!supabaseClient || !currentUser) return;
+      if (hasTaskDraft()) {
+        setSyncStatus("Finish adding or editing this task before refreshing.");
+        return;
+      }
       if (isLoadingCloud || isSavingCloud || hasUnsavedChanges) return;
       const revisionAtLoad = localRevision;
       isLoadingCloud = true;
@@ -1141,7 +1216,10 @@
 
       let createdRecurringTasks = 0;
       if (data?.state) {
-        state = { ...seed, ...data.state, recurringTasks: data.state.recurringTasks || [] };
+        const cloudState = { ...seed, ...data.state, recurringTasks: data.state.recurringTasks || [] };
+        state = shouldMergeLegacyCache ? mergePlannerStates(cloudState, state) : cloudState;
+        createdRecurringTasks = ensureRecurringTasks();
+      } else if (shouldMergeLegacyCache) {
         createdRecurringTasks = ensureRecurringTasks();
       } else {
         state = freshState();
@@ -1152,13 +1230,18 @@
       isLoadingCloud = false;
       save();
       render();
-      if (createdRecurringTasks || !data?.state) {
+      if (shouldMergeLegacyCache) {
+        localStorage.setItem(migrationKeyForUser(currentUser.id), "true");
+      }
+      if (createdRecurringTasks || !data?.state || shouldMergeLegacyCache) {
         localRevision += 1;
         hasUnsavedChanges = true;
+        localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
+        shouldMergeLegacyCache = false;
         await saveCloudState();
       } else {
         setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
-        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
+        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · ${state.tasks.length} tasks`);
       }
     }
 
@@ -1172,7 +1255,13 @@
       currentUser = data.session?.user || null;
       updateAuthUi();
       if (currentUser) {
-        await loadCloudState();
+        hydrateUserCache(currentUser);
+        if (hasUnsavedChanges) {
+          cloudReady = true;
+          await saveCloudState();
+        } else {
+          await loadCloudState();
+        }
       } else {
         state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
         render();
@@ -1200,7 +1289,8 @@
     }
 
     function selectDate(value) {
-      selectedDate = value < today ? today : value;
+      showAllDates = false;
+      selectedDate = value;
       const createdRecurringTasks = ensureRecurringTasks(selectedDate);
       render();
       if (createdRecurringTasks) markDirty();
@@ -1293,9 +1383,9 @@
 
     function visibleTasks() {
       return state.tasks
-        .filter((task) => task.date === selectedDate)
+        .filter((task) => showAllDates || task.date === selectedDate)
         .filter((task) => state.activeStreamId === "all" || task.streamId === state.activeStreamId)
-        .sort((a, b) => (a.start || "99:99").localeCompare(b.start || "99:99"));
+        .sort((a, b) => `${a.date} ${a.start || "99:99"}`.localeCompare(`${b.date} ${b.start || "99:99"}`));
     }
 
     function streamName(id) {
@@ -1311,7 +1401,7 @@
     }
 
     function renderStreams() {
-      const dayTasks = state.tasks.filter((task) => task.date === selectedDate);
+      const dayTasks = state.tasks.filter((task) => showAllDates || task.date === selectedDate);
       const allCount = dayTasks.filter((task) => !task.done).length;
       const buttons = [
         { id: "all", name: "All streams", color: "#1d2530", count: allCount },
@@ -1340,15 +1430,16 @@
 
     function renderHeader() {
       const stream = activeStream();
-      els.activeStreamTitle.textContent = stream ? stream.name : (selectedDate === today ? "Today" : "Plan");
-      els.todayLabel.textContent = formatTaskDate(selectedDate);
+      els.activeStreamTitle.textContent = stream ? stream.name : (showAllDates ? "All tasks" : (selectedDate === today ? "Today" : "Plan"));
+      els.todayLabel.textContent = showAllDates ? "Every saved task" : formatTaskDate(selectedDate);
       els.planDate.value = selectedDate;
-      els.planDate.min = today;
-      els.previousDayButton.disabled = selectedDate <= today;
-      els.taskDate.value = selectedDate;
+      els.previousDayButton.disabled = showAllDates;
+      els.nextDayButton.disabled = showAllDates;
+      els.allDatesButton.setAttribute("aria-pressed", String(showAllDates));
+      els.taskDate.value = !showAllDates && selectedDate >= today ? selectedDate : today;
       els.addTaskButton.textContent = "Add task";
-      els.scoreboardTitle.textContent = selectedDate === today ? "Today’s Scoreboard" : "Day’s Scoreboard";
-      els.scheduleTitle.textContent = selectedDate === today ? "Timeboxed Day" : `Timeboxed ${formatTaskDate(selectedDate, { short: true })}`;
+      els.scoreboardTitle.textContent = showAllDates ? "All Task Scoreboard" : (selectedDate === today ? "Today’s Scoreboard" : "Day’s Scoreboard");
+      els.scheduleTitle.textContent = showAllDates ? "All Timeboxes" : (selectedDate === today ? "Timeboxed Day" : `Timeboxed ${formatTaskDate(selectedDate, { short: true })}`);
       els.focusPill.textContent = stream ? stream.name : "All streams";
       els.editStreamButton.disabled = state.activeStreamId === "all";
       els.editStreamButton.style.opacity = state.activeStreamId === "all" ? "0.5" : "1";
@@ -1425,7 +1516,7 @@
           <time>${task.start}</time>
           <div>
             <strong>${escapeHtml(task.title)}</strong>
-            <span class="subtle">${escapeHtml(streamName(task.streamId))} · ${formatMinutes(task.minutes)}${task.repeat && task.repeat !== "none" ? ` · ${task.repeat}` : ""}</span>
+            <span class="subtle">${showAllDates ? `${escapeHtml(formatTaskDate(task.date, { short: true }))} · ` : ""}${escapeHtml(streamName(task.streamId))} · ${formatMinutes(task.minutes)}${task.repeat && task.repeat !== "none" ? ` · ${task.repeat}` : ""}</span>
           </div>
           <span class="pill">${task.done ? "done" : "open"}</span>
         </div>
@@ -1465,6 +1556,7 @@
 
       els.taskForm.reset();
       selectedDate = task.date;
+      showAllDates = false;
       syncTaskStreamDefault();
       render();
       markDirty();
@@ -1514,6 +1606,11 @@
 
     els.todayButton.addEventListener("click", () => selectDate(today));
 
+    els.allDatesButton.addEventListener("click", () => {
+      showAllDates = true;
+      render();
+    });
+
     els.nextDayButton.addEventListener("click", () => {
       const date = parseDate(selectedDate);
       date.setDate(date.getDate() + 1);
@@ -1523,7 +1620,10 @@
     els.planDate.addEventListener("change", () => selectDate(els.planDate.value || today));
 
     els.taskDate.addEventListener("change", () => {
-      if (els.taskDate.value) selectedDate = els.taskDate.value;
+      if (els.taskDate.value) {
+        selectedDate = els.taskDate.value;
+        showAllDates = false;
+      }
     });
 
     els.authForm.addEventListener("submit", async (event) => {
@@ -1537,9 +1637,15 @@
       if (error) return setAuthStatus(error.message);
       localStorage.setItem(staySignedInKey, String(els.staySignedIn.checked));
       currentUser = data.user;
+      hydrateUserCache(currentUser);
       els.authPassword.value = "";
       updateAuthUi();
-      await loadCloudState();
+      if (hasUnsavedChanges) {
+        cloudReady = true;
+        await saveCloudState();
+      } else {
+        await loadCloudState();
+      }
     });
 
     els.signUpButton.addEventListener("click", async () => {
@@ -1561,8 +1667,14 @@
       els.authPassword.value = "";
       if (data.session) {
         currentUser = data.user;
+        hydrateUserCache(currentUser);
         updateAuthUi();
-        await loadCloudState();
+        if (hasUnsavedChanges) {
+          cloudReady = true;
+          await saveCloudState();
+        } else {
+          await loadCloudState();
+        }
       } else {
         currentUser = null;
         setAuthStatus("Account created. Check your email to confirm, then sign in. Use Resend if it does not arrive.");
@@ -1602,6 +1714,21 @@
 
     els.signOutButton.addEventListener("click", async () => {
       if (!supabaseClient) return;
+      clearTimeout(syncTimer);
+      if (isSavingCloud) {
+        setSyncStatus("Finishing save before sign-out...");
+        await new Promise((resolve) => {
+          const checkSave = () => isSavingCloud ? setTimeout(checkSave, 50) : resolve();
+          checkSave();
+        });
+      }
+      if (hasUnsavedChanges) {
+        const saved = await saveCloudState();
+        if (!saved || hasUnsavedChanges) {
+          setSyncStatus("Sign-out paused because your latest changes are not saved.");
+          return;
+        }
+      }
       await supabaseClient.auth.signOut();
       currentUser = null;
       cloudReady = false;
@@ -1648,6 +1775,7 @@
       if (!task) return;
       editingId = id;
       els.editTitle.value = task.title;
+      els.editDate.min = task.date < today ? task.date : today;
       els.editDate.value = task.date || today;
       els.editStart.value = task.start;
       els.editMinutes.value = task.minutes || "";
@@ -1681,6 +1809,7 @@
       }
       els.editDialog.close();
       selectedDate = task.date;
+      showAllDates = false;
       render();
       markDirty();
     });
@@ -1759,7 +1888,13 @@
       if (userChanged) cloudReady = false;
       updateAuthUi();
       if (currentUser) {
-        if (userChanged || !cloudReady) loadCloudState();
+        if (userChanged) hydrateUserCache(currentUser);
+        if (hasUnsavedChanges) {
+          cloudReady = true;
+          saveCloudState();
+        } else if (userChanged || !cloudReady) {
+          loadCloudState();
+        }
       } else {
         state = { activeStreamId: "all", streams: [], recurringTasks: [], tasks: [] };
         render();
@@ -1775,6 +1910,12 @@
         loadCloudState();
       }
     });
+
+    setInterval(() => {
+      if (document.visibilityState === "visible" && currentUser && cloudReady && !hasUnsavedChanges && !isSavingCloud && !isLoadingCloud) {
+        loadCloudState();
+      }
+    }, 10000);
 
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
