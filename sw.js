@@ -1,4 +1,4 @@
-const cacheName = "momentum-v20";
+const cacheName = "momentum-v21";
 const appShell = [
   "./",
   "./index.html",

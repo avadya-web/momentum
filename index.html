@@ -728,6 +728,7 @@
         <button class="ghost" type="button" id="signOutButton">Sign out</button>
         <button class="ghost" type="button" id="syncNowButton">Save &amp; sync</button>
         <p class="auth-status" id="syncStatus">Sync starts after sign-in.</p>
+        <p class="subtle">Version 21</p>
 
         <div class="nav-title">Work Streams</div>
         <div class="stream-list" id="streamList"></div>
@@ -1131,9 +1132,11 @@
         state: stateSnapshot,
         updated_at: new Date().toISOString()
       };
-      const { error } = await supabaseClient
+      const { data, error } = await supabaseClient
         .from("planner_states")
-        .upsert(payload, { onConflict: "user_id" });
+        .upsert(payload, { onConflict: "user_id" })
+        .select("state")
+        .single();
 
       isSavingCloud = false;
 
@@ -1144,6 +1147,17 @@
         return false;
       }
 
+      const savedTaskIds = new Set((data?.state?.tasks || []).map((task) => task.id));
+      const expectedTasks = stateSnapshot.tasks || [];
+      const cloudVerified = savedTaskIds.size === expectedTasks.length && expectedTasks.every((task) => savedTaskIds.has(task.id));
+      if (!cloudVerified) {
+        hasUnsavedChanges = true;
+        localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
+        setAuthStatus("Sync verification failed. Your local recovery copy is preserved.");
+        setSyncStatus(`Cloud verification failed: expected ${expectedTasks.length} tasks, found ${savedTaskIds.size}.`);
+        return false;
+      }
+
       hasUnsavedChanges = localRevision !== savingRevision;
       if (hasUnsavedChanges) {
         setSyncStatus("Saving latest changes...");
@@ -1151,7 +1165,7 @@
       } else {
         localStorage.removeItem(pendingKeyForUser(currentUser.id));
         setAuthStatus(`Signed in as ${currentUser.email}. Synced.`);
-        setSyncStatus(`Synced ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · ${state.tasks.length} tasks`);
+        setSyncStatus(`Saved ${state.tasks.length} tasks to cloud · ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
       }
       return true;
     }
@@ -1161,11 +1175,18 @@
         setSyncStatus("Sign in before syncing.");
         return;
       }
-      if (hasUnsavedChanges) {
-        await saveCloudState();
+      if (hasTaskDraft()) {
+        setSyncStatus("Add or cancel the task draft before saving.");
         return;
       }
-      await loadCloudState();
+      if (isLoadingCloud || isSavingCloud) {
+        setSyncStatus("Sync is already in progress...");
+        return;
+      }
+      save();
+      localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
+      hasUnsavedChanges = true;
+      await saveCloudState();
     }
 
     function hasTaskDraft() {
