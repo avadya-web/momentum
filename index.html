@@ -728,7 +728,7 @@
         <button class="ghost" type="button" id="signOutButton">Sign out</button>
         <button class="ghost" type="button" id="syncNowButton">Save &amp; sync</button>
         <p class="auth-status" id="syncStatus">Sync starts after sign-in.</p>
-        <p class="subtle">Version 21</p>
+        <p class="subtle">Version 22</p>
 
         <div class="nav-title">Work Streams</div>
         <div class="stream-list" id="streamList"></div>
@@ -879,6 +879,9 @@
         { id: "personal", name: "Personal", color: colors[1] }
       ],
       recurringTasks: [],
+      deletedTaskIds: [],
+      deletedStreamIds: [],
+      clientUpdatedAt: "",
       tasks: [
         {
           id: crypto.randomUUID(),
@@ -1035,12 +1038,12 @@
 
     function loadUserState(userId) {
       const raw = localStorage.getItem(storageKeyForUser(userId)) || localStorage.getItem(legacyStorageKey);
-      if (!raw) return seed;
+      if (!raw) return normalizePlannerState(seed);
       try {
         const parsed = JSON.parse(raw);
-        return { ...seed, ...parsed, recurringTasks: parsed.recurringTasks || [] };
+        return normalizePlannerState(parsed);
       } catch {
-        return seed;
+        return normalizePlannerState(seed);
       }
     }
 
@@ -1059,24 +1062,53 @@
       render();
     }
 
-    function mergeById(primary = [], secondary = []) {
+    function normalizePlannerState(input = {}) {
+      const cloneItems = (items) => items.map((item) => ({ ...item }));
+      return {
+        ...seed,
+        ...input,
+        streams: cloneItems(Array.isArray(input.streams) ? input.streams : seed.streams),
+        recurringTasks: cloneItems(Array.isArray(input.recurringTasks) ? input.recurringTasks : []),
+        tasks: cloneItems(Array.isArray(input.tasks) ? input.tasks : seed.tasks),
+        deletedTaskIds: Array.isArray(input.deletedTaskIds) ? [...input.deletedTaskIds] : [],
+        deletedStreamIds: Array.isArray(input.deletedStreamIds) ? [...input.deletedStreamIds] : [],
+        clientUpdatedAt: input.clientUpdatedAt || ""
+      };
+    }
+
+    function touchState() {
+      state.clientUpdatedAt = new Date().toISOString();
+    }
+
+    function mergeById(primary = [], secondary = [], deletedIds = []) {
+      const deleted = new Set(deletedIds);
       const merged = new Map(secondary.map((item) => [item.id, item]));
-      primary.forEach((item) => merged.set(item.id, item));
+      primary.forEach((item) => {
+        if (!deleted.has(item.id)) merged.set(item.id, item);
+      });
+      deleted.forEach((id) => merged.delete(id));
       return Array.from(merged.values());
     }
 
     function mergePlannerStates(cloudState, localState) {
+      const cloud = normalizePlannerState(cloudState);
+      const local = normalizePlannerState(localState);
+      const deletedTaskIds = Array.from(new Set([...(cloud.deletedTaskIds || []), ...(local.deletedTaskIds || [])]));
+      const deletedStreamIds = Array.from(new Set([...(cloud.deletedStreamIds || []), ...(local.deletedStreamIds || [])]));
       return {
-        ...localState,
-        ...cloudState,
-        streams: mergeById(cloudState.streams, localState.streams),
-        recurringTasks: mergeById(cloudState.recurringTasks, localState.recurringTasks),
-        tasks: mergeById(cloudState.tasks, localState.tasks)
+        ...cloud,
+        ...local,
+        streams: mergeById(local.streams, cloud.streams, deletedStreamIds),
+        recurringTasks: mergeById(local.recurringTasks, cloud.recurringTasks),
+        tasks: mergeById(local.tasks, cloud.tasks, deletedTaskIds),
+        deletedTaskIds,
+        deletedStreamIds,
+        clientUpdatedAt: [cloud.clientUpdatedAt, local.clientUpdatedAt].filter(Boolean).sort().pop() || new Date().toISOString()
       };
     }
 
     function freshState() {
-      return JSON.parse(JSON.stringify(seed));
+      return normalizePlannerState(JSON.parse(JSON.stringify(seed)));
     }
 
     function setAuthStatus(message) {
@@ -1109,6 +1141,7 @@
 
     function markDirty() {
       if (!currentUser) return;
+      touchState();
       save();
       localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
       localRevision += 1;
@@ -1124,9 +1157,29 @@
       if (!supabaseClient || !currentUser || isSavingCloud || isLoadingCloud) return false;
       clearTimeout(syncTimer);
       const savingRevision = localRevision;
-      const stateSnapshot = JSON.parse(JSON.stringify(state));
+      let stateSnapshot = normalizePlannerState(JSON.parse(JSON.stringify(state)));
       isSavingCloud = true;
       setSyncStatus("Saving...");
+
+      const { data: existingData, error: existingError } = await supabaseClient
+        .from("planner_states")
+        .select("state, updated_at")
+        .eq("user_id", currentUser.id)
+        .maybeSingle();
+
+      if (existingError) {
+        isSavingCloud = false;
+        hasUnsavedChanges = true;
+        localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
+        setAuthStatus(`Sync paused: ${existingError.message}`);
+        setSyncStatus(`Save failed: ${existingError.message}`);
+        return false;
+      }
+
+      if (existingData?.state) {
+        stateSnapshot = mergePlannerStates(normalizePlannerState(existingData.state), stateSnapshot);
+      }
+
       const payload = {
         user_id: currentUser.id,
         state: stateSnapshot,
@@ -1135,7 +1188,7 @@
       const { data, error } = await supabaseClient
         .from("planner_states")
         .upsert(payload, { onConflict: "user_id" })
-        .select("state")
+        .select("state, updated_at")
         .single();
 
       isSavingCloud = false;
@@ -1159,6 +1212,9 @@
       }
 
       hasUnsavedChanges = localRevision !== savingRevision;
+      state = hasUnsavedChanges ? mergePlannerStates(stateSnapshot, state) : normalizePlannerState(stateSnapshot);
+      save();
+      render();
       if (hasUnsavedChanges) {
         setSyncStatus("Saving latest changes...");
         queueCloudSave();
@@ -1216,7 +1272,7 @@
 
       const { data, error } = await supabaseClient
         .from("planner_states")
-        .select("state")
+        .select("state, updated_at")
         .eq("user_id", currentUser.id)
         .maybeSingle();
 
@@ -1237,7 +1293,19 @@
 
       let createdRecurringTasks = 0;
       if (data?.state) {
-        const cloudState = { ...seed, ...data.state, recurringTasks: data.state.recurringTasks || [] };
+        const cloudState = normalizePlannerState(data.state);
+        const localState = normalizePlannerState(state);
+        const localStamp = Date.parse(localState.clientUpdatedAt || "");
+        const cloudStamp = Date.parse(cloudState.clientUpdatedAt || data.updated_at || "");
+        if (localStamp && cloudStamp && localStamp > cloudStamp && localState.tasks.length) {
+          isLoadingCloud = false;
+          cloudReady = true;
+          hasUnsavedChanges = true;
+          localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
+          setSyncStatus("Local planner is newer. Saving it to cloud...");
+          await saveCloudState();
+          return;
+        }
         state = shouldMergeLegacyCache ? mergePlannerStates(cloudState, state) : cloudState;
         createdRecurringTasks = ensureRecurringTasks();
       } else if (shouldMergeLegacyCache) {
@@ -1255,6 +1323,7 @@
         localStorage.setItem(migrationKeyForUser(currentUser.id), "true");
       }
       if (createdRecurringTasks || !data?.state || shouldMergeLegacyCache) {
+        touchState();
         localRevision += 1;
         hasUnsavedChanges = true;
         localStorage.setItem(pendingKeyForUser(currentUser.id), "true");
@@ -1781,6 +1850,7 @@
         if (task?.recurrenceId && template) {
           template.skippedDates = Array.from(new Set([...(template.skippedDates || []), task.date]));
         }
+        state.deletedTaskIds = Array.from(new Set([...(state.deletedTaskIds || []), deleteButton.dataset.delete]));
         state.tasks = state.tasks.filter((item) => item.id !== deleteButton.dataset.delete);
         render();
         markDirty();
@@ -1854,9 +1924,12 @@
       const recurringCount = state.recurringTasks.filter((template) => template.streamId === stream.id).length;
       const message = `Delete "${stream.name}" and remove ${taskCount} task${taskCount === 1 ? "" : "s"}${recurringCount ? ` plus ${recurringCount} recurring template${recurringCount === 1 ? "" : "s"}` : ""}?`;
       if (!confirm(message)) return;
+      const removedTaskIds = state.tasks.filter((task) => task.streamId === stream.id).map((task) => task.id);
       state.streams = state.streams.filter((item) => item.id !== stream.id);
       state.tasks = state.tasks.filter((task) => task.streamId !== stream.id);
       state.recurringTasks = state.recurringTasks.filter((template) => template.streamId !== stream.id);
+      state.deletedStreamIds = Array.from(new Set([...(state.deletedStreamIds || []), stream.id]));
+      state.deletedTaskIds = Array.from(new Set([...(state.deletedTaskIds || []), ...removedTaskIds]));
       state.activeStreamId = "all";
       render();
       markDirty();
@@ -1871,6 +1944,7 @@
         }
       });
       const visibleIds = new Set(doneTasks.map((task) => task.id));
+      state.deletedTaskIds = Array.from(new Set([...(state.deletedTaskIds || []), ...visibleIds]));
       state.tasks = state.tasks.filter((task) => !visibleIds.has(task.id));
       render();
       markDirty();
